@@ -1,38 +1,49 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import {
+  books,
+  type InsertBook,
+  type UpdateBook,
+  type Book
+} from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getBooks(status?: "purchased" | "wishlist"): Promise<Book[]>;
+  getBook(id: number): Promise<Book | undefined>;
+  createBook(book: InsertBook): Promise<Book>;
+  updateBook(id: number, updates: UpdateBook): Promise<Book>;
+  deleteBook(id: number): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async getBooks(status?: "purchased" | "wishlist"): Promise<Book[]> {
+    if (status) {
+      return await db.select().from(books).where(eq(books.status, status)).orderBy(desc(books.createdAt));
+    }
+    return await db.select().from(books).orderBy(desc(books.createdAt));
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getBook(id: number): Promise<Book | undefined> {
+    const [book] = await db.select().from(books).where(eq(books.id, id));
+    return book;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async createBook(book: InsertBook): Promise<Book> {
+    const [newBook] = await db.insert(books).values(book).returning();
+    return newBook;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateBook(id: number, updates: UpdateBook): Promise<Book> {
+    const [updated] = await db.update(books)
+      .set(updates)
+      .where(eq(books.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteBook(id: number): Promise<void> {
+    await db.delete(books).where(eq(books.id, id));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
