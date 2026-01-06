@@ -11,6 +11,7 @@ export const books = pgTable("books", {
   rating: integer("rating"), // 1-5
   notes: text("notes"),
   coverUrl: text("cover_url"),
+  imageUrl: text("image_url"), // Added for file uploader
   createdAt: timestamp("created_at").defaultNow(),
 });
 

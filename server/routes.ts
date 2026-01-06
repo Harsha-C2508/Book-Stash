@@ -3,11 +3,14 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Register object storage routes for file uploads
+  registerObjectStorageRoutes(app);
   app.get(api.books.list.path, async (req, res) => {
     const status = req.query.status as "purchased" | "wishlist" | undefined;
     const books = await storage.getBooks(status);
