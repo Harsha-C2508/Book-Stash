@@ -6,11 +6,16 @@ import {
   Textarea, 
   Button, 
   Group, 
-  Stack 
+  Stack,
+  Text,
+  Paper
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { useCreateBook } from '@/hooks/use-books';
 import { type InsertBook } from '@shared/schema';
+import { ObjectUploader } from './ObjectUploader';
+import { useUpload } from '@/hooks/use-upload';
+import { IconUpload } from '@tabler/icons-react';
 
 interface BookFormProps {
   onSuccess?: () => void;
@@ -19,6 +24,7 @@ interface BookFormProps {
 
 export function BookForm({ onSuccess, onCancel }: BookFormProps) {
   const createBook = useCreateBook();
+  const { getUploadParameters } = useUpload();
 
   const form = useForm<InsertBook>({
     initialValues: {
@@ -26,9 +32,10 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
       author: '',
       status: 'wishlist',
       rating: undefined,
-      purchaseDate: undefined, // string in schema (date), but Date object for input
+      purchaseDate: undefined,
       notes: '',
       coverUrl: '',
+      imageUrl: '',
     },
     validate: {
       title: (value) => (value.length < 1 ? 'Title is required' : null),
@@ -37,8 +44,6 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
   });
 
   const handleSubmit = (values: InsertBook) => {
-    // Transform Date object to string if needed by backend, though Zod coerce usually handles it.
-    // Drizzle date type expects string "YYYY-MM-DD" or Date object.
     createBook.mutate(values, {
       onSuccess: () => {
         form.reset();
@@ -93,12 +98,39 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
           </>
         )}
 
-        <TextInput
-          label="Cover Image URL (Optional)"
-          placeholder="https://images.unsplash.com/..."
-          description="Use an Unsplash URL for best results"
-          {...form.getInputProps('coverUrl')}
-        />
+        <Stack gap="xs">
+          <Text size="sm" fw={500}>Book Cover</Text>
+          <Group align="flex-end">
+            <TextInput
+              label="Cover Image URL"
+              placeholder="https://images.unsplash.com/..."
+              style={{ flex: 1 }}
+              {...form.getInputProps('coverUrl')}
+            />
+            <ObjectUploader
+              onGetUploadParameters={getUploadParameters}
+              onComplete={(result) => {
+                if (result.successful?.[0]) {
+                  const uploadResponse = result.successful[0].response?.body as any;
+                  if (uploadResponse?.objectPath) {
+                    form.setFieldValue('imageUrl', uploadResponse.objectPath);
+                    // Also set coverUrl to the serving URL so it shows in the UI
+                    form.setFieldValue('coverUrl', uploadResponse.objectPath);
+                  }
+                }
+              }}
+            >
+              Upload
+            </ObjectUploader>
+          </Group>
+          {form.values.imageUrl && (
+            <Paper withBorder p="xs" radius="sm">
+              <Text size="xs" c="dimmed" truncate>
+                Uploaded: {form.values.imageUrl}
+              </Text>
+            </Paper>
+          )}
+        </Stack>
 
         <Textarea
           label="Notes"
