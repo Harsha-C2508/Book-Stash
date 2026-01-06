@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { registerChatRoutes } from "./replit_integrations/chat";
+import { registerImageRoutes } from "./replit_integrations/image";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -11,6 +13,8 @@ export async function registerRoutes(
 ): Promise<Server> {
   // Register object storage routes for file uploads
   registerObjectStorageRoutes(app);
+  registerChatRoutes(app);
+  registerImageRoutes(app);
   app.get(api.books.list.path, async (req, res) => {
     const status = req.query.status as "purchased" | "wishlist" | undefined;
     const books = await storage.getBooks(status);

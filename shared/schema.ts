@@ -22,4 +22,4 @@ export const insertBookSchema = createInsertSchema(books).omit({
 
 export type Book = typeof books.$inferSelect;
 export type InsertBook = z.infer<typeof insertBookSchema>;
-export type UpdateBook = Partial<InsertBook>;
+export * from "./models/chat";
