@@ -85,7 +85,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               placeholder="Pick date"
               clearable
             value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
-            onChange={(date) => form.setFieldValue('purchaseDate', date ? date.toISOString().split('T')[0] : undefined)}
+            onChange={(date: Date | null) => form.setFieldValue('purchaseDate', date ? date.toISOString().split('T')[0] : undefined)}
             />
             
             <NumberInput

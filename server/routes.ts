@@ -15,6 +15,37 @@ export async function registerRoutes(
   registerObjectStorageRoutes(app);
   registerChatRoutes(app);
   registerImageRoutes(app);
+
+  app.post("/api/books/summary", async (req, res) => {
+    try {
+      const { title, author } = req.body;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.1",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful librarian. Provide a concise summary and key insights for the requested book. Always respond in the language the user might prefer based on context, or English as default."
+          },
+          {
+            role: "user",
+            content: `Please provide a summary and key details for the book "${title}" by ${author}.`
+          }
+        ],
+        max_completion_tokens: 1000,
+      });
+
+      res.json({ summary: response.choices[0].message.content });
+    } catch (error) {
+      console.error("AI Summary error:", error);
+      res.status(500).json({ error: "Failed to generate AI summary" });
+    }
+  });
+
   app.get(api.books.list.path, async (req, res) => {
     const status = req.query.status as "purchased" | "wishlist" | undefined;
     const books = await storage.getBooks(status);
