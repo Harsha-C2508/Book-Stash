@@ -10,40 +10,85 @@ import {
   Group, 
   Loader, 
   Center,
-  ThemeIcon
+  ThemeIcon,
+  Indicator,
+  Menu,
+  ActionIcon
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell } from 'lucide-react';
+import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash } from 'lucide-react';
 import { useBooks } from '@/hooks/use-books';
 import { BookCard } from '@/components/BookCard';
 import { BookForm } from '@/components/BookForm';
 import { BookDetailsDrawer } from '@/components/BookDetailsDrawer';
 import { type Book } from '@shared/schema';
 
+interface NotificationMessage {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: number;
+}
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<string | null>('purchased');
   const [opened, { open, close }] = useDisclosure(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [history, setHistory] = useState<NotificationMessage[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('notifications_history');
+    if (saved) {
+      setHistory(JSON.parse(saved));
+    }
+  }, []);
+
+  const saveHistory = (newHistory: NotificationMessage[]) => {
+    setHistory(newHistory);
+    localStorage.setItem('notifications_history', JSON.stringify(newHistory));
+  };
+
+  const addNotification = (title: string, message: string) => {
+    const newNotif = {
+      id: Math.random().toString(36).substr(2, 9),
+      title,
+      message,
+      timestamp: Date.now()
+    };
+    saveHistory([newNotif, ...history]);
+    setUnreadCount(prev => prev + 1);
+  };
+
+  const clearNotifications = () => {
+    saveHistory([]);
+    setUnreadCount(0);
+  };
 
   // Fetch both lists (react-query handles caching so this is efficient)
   const { data: purchasedBooks, isLoading: loadingPurchased } = useBooks('purchased');
   const { data: wishlistBooks, isLoading: loadingWishlist } = useBooks('wishlist');
 
   useEffect(() => {
-    // Basic notification check - could be more robust with a proper backend-driven notification system
+    // Basic notification check
     const lastCheck = localStorage.getItem('last_wishlist_reminder');
     const now = new Date();
     const currentMonthYear = `${now.getMonth()}-${now.getFullYear()}`;
 
     if (lastCheck !== currentMonthYear && wishlistBooks && wishlistBooks.length > 0) {
+      const title = 'Monthly Wishlist Reminder';
+      const message = `Don't forget your reading goals! You have ${wishlistBooks.length} items in your wishlist. Ready to add a new one to your library?`;
+      
       notifications.show({
-        title: 'Monthly Wishlist Reminder',
-        message: `Don't forget your reading goals! You have ${wishlistBooks.length} items in your wishlist. Ready to add a new one to your library?`,
+        title,
+        message,
         icon: <Bell size={18} />,
         color: 'violet',
         autoClose: false,
       });
+      
+      addNotification(title, message);
       localStorage.setItem('last_wishlist_reminder', currentMonthYear);
     }
   }, [wishlistBooks]);
@@ -74,16 +119,52 @@ export default function Dashboard() {
               </div>
             </Group>
             
-            <Button 
-              leftSection={<Plus size={18} />}
-              onClick={open}
-              size="md"
-              variant="white"
-              c="violet"
-              className="font-semibold shadow-xl hover:shadow-2xl transition-all"
-            >
-              Add Book
-            </Button>
+            <Group gap="md">
+              <Menu shadow="md" width={300} position="bottom-end" onClose={() => setUnreadCount(0)}>
+                <Menu.Target>
+                  <Indicator label={unreadCount} size={16} disabled={unreadCount === 0} color="red">
+                    <ActionIcon variant="white" color="violet" size="lg" radius="md">
+                      <Bell size={20} />
+                    </ActionIcon>
+                  </Indicator>
+                </Menu.Target>
+
+                <Menu.Dropdown p="xs">
+                  <Group justify="space-between" mb="xs" px="xs">
+                    <Text fw={600} size="sm">Notifications</Text>
+                    {history.length > 0 && (
+                      <ActionIcon variant="subtle" color="gray" size="sm" onClick={clearNotifications}>
+                        <Trash size={14} />
+                      </ActionIcon>
+                    )}
+                  </Group>
+                  <Menu.Divider />
+                  {history.length === 0 ? (
+                    <Text size="xs" c="dimmed" ta="center" py="xl">No new notifications</Text>
+                  ) : (
+                    history.map((notif) => (
+                      <Menu.Item key={notif.id} p="xs">
+                        <Stack gap={2}>
+                          <Text fw={500} size="xs">{notif.title}</Text>
+                          <Text size="xs" c="dimmed" lineClamp={2}>{notif.message}</Text>
+                        </Stack>
+                      </Menu.Item>
+                    ))
+                  )}
+                </Menu.Dropdown>
+              </Menu>
+
+              <Button 
+                leftSection={<Plus size={18} />}
+                onClick={open}
+                size="md"
+                variant="white"
+                c="violet"
+                className="font-semibold shadow-xl hover:shadow-2xl transition-all"
+              >
+                Add Book
+              </Button>
+            </Group>
           </Group>
         </Container>
       </div>
