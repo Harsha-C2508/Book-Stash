@@ -8,13 +8,14 @@ interface BookCardProps {
   book: Book;
 }
 
-export function BookCard({ book }: BookCardProps) {
+export function BookCard({ book, onOpenDetails }: { book: Book; onOpenDetails?: (book: Book) => void }) {
   const deleteBook = useDeleteBook();
   const updateBook = useUpdateBook();
 
   const isWishlist = book.status === 'wishlist';
 
-  const handleStatusChange = () => {
+  const handleStatusChange = (e: React.MouseEvent) => {
+    e.stopPropagation();
     updateBook.mutate({
       id: book.id,
       status: isWishlist ? 'purchased' : 'wishlist',
@@ -26,13 +27,19 @@ export function BookCard({ book }: BookCardProps) {
     updateBook.mutate({ id: book.id, rating: value });
   };
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteBook.mutate(book.id);
+  };
+
   return (
     <Card 
       shadow="sm" 
       padding="lg" 
       radius="md" 
       withBorder
-      className="h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
+      className="h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer"
+      onClick={() => onOpenDetails?.(book)}
     >
       <Card.Section>
         {book.coverUrl ? (
@@ -96,7 +103,7 @@ export function BookCard({ book }: BookCardProps) {
         <ActionIcon 
           variant="subtle" 
           color="red" 
-          onClick={() => deleteBook.mutate(book.id)}
+          onClick={handleDelete}
           loading={deleteBook.isPending}
           aria-label="Delete book"
         >

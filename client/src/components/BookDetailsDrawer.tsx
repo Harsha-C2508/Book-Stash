@@ -67,7 +67,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
           <Stack gap="xs">
             <Title order={2}>{book.title}</Title>
             <Text size="lg" c="dimmed">{book.author}</Text>
-          </Group>
+          </Stack>
 
           <Group gap="xs">
             <Badge color={book.status === 'purchased' ? 'green' : 'blue'}>
@@ -107,7 +107,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
                 </Text>
               </ScrollArea>
             ) : (
-              <Text size="sm" c="dimmed" italic>
+              <Text size="sm" c="dimmed">
                 Click the button to get AI-generated insights about this book.
               </Text>
             )}

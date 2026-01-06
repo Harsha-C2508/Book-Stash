@@ -19,12 +19,12 @@ export async function registerRoutes(
   app.post("/api/books/summary", async (req, res) => {
     try {
       const { title, author } = req.body;
-      const openai = new OpenAI({
+      const openaiInstance = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const response = await openai.chat.completions.create({
+      const response = await openaiInstance.chat.completions.create({
         model: "gpt-5.1",
         messages: [
           {

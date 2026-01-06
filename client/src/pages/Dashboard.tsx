@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Container, 
   Title, 
@@ -13,18 +13,40 @@ import {
   ThemeIcon
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Plus, LibraryBig, ShoppingBag, BookMarked } from 'lucide-react';
+import { notifications } from '@mantine/notifications';
+import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell } from 'lucide-react';
 import { useBooks } from '@/hooks/use-books';
 import { BookCard } from '@/components/BookCard';
 import { BookForm } from '@/components/BookForm';
+import { BookDetailsDrawer } from '@/components/BookDetailsDrawer';
+import { type Book } from '@shared/schema';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<string | null>('purchased');
   const [opened, { open, close }] = useDisclosure(false);
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
 
   // Fetch both lists (react-query handles caching so this is efficient)
   const { data: purchasedBooks, isLoading: loadingPurchased } = useBooks('purchased');
   const { data: wishlistBooks, isLoading: loadingWishlist } = useBooks('wishlist');
+
+  useEffect(() => {
+    // Basic notification check - could be more robust with a proper backend-driven notification system
+    const lastCheck = localStorage.getItem('last_wishlist_reminder');
+    const now = new Date();
+    const currentMonthYear = `${now.getMonth()}-${now.getFullYear()}`;
+
+    if (lastCheck !== currentMonthYear && wishlistBooks && wishlistBooks.length > 0) {
+      notifications.show({
+        title: 'Monthly Wishlist Reminder',
+        message: `Don't forget your reading goals! You have ${wishlistBooks.length} items in your wishlist. Ready to add a new one to your library?`,
+        icon: <Bell size={18} />,
+        color: 'violet',
+        autoClose: false,
+      });
+      localStorage.setItem('last_wishlist_reminder', currentMonthYear);
+    }
+  }, [wishlistBooks]);
 
   const isLoading = loadingPurchased || loadingWishlist;
   
@@ -97,7 +119,7 @@ export default function Dashboard() {
               <Grid>
                 {purchasedBooks?.map((book) => (
                   <Grid.Col key={book.id} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
-                    <BookCard book={book} />
+                    <BookCard book={book} onOpenDetails={setSelectedBook} />
                   </Grid.Col>
                 ))}
               </Grid>
@@ -113,7 +135,7 @@ export default function Dashboard() {
               <Grid>
                 {wishlistBooks?.map((book) => (
                   <Grid.Col key={book.id} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
-                    <BookCard book={book} />
+                    <BookCard book={book} onOpenDetails={setSelectedBook} />
                   </Grid.Col>
                 ))}
               </Grid>
@@ -132,6 +154,11 @@ export default function Dashboard() {
       >
         <BookForm onSuccess={close} onCancel={close} />
       </Modal>
+
+      <BookDetailsDrawer 
+        book={selectedBook} 
+        onClose={() => setSelectedBook(null)} 
+      />
     </div>
   );
 }
