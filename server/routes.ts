@@ -47,6 +47,36 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/translate", async (req, res) => {
+    try {
+      const { text, targetLanguage = "English" } = req.body;
+      const openaiInstance = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const response = await openaiInstance.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional translator. Translate the following text into ${targetLanguage}. Maintain the original tone and meaning.`
+          },
+          {
+            role: "user",
+            content: text
+          }
+        ],
+      });
+
+      const translation = response.choices[0].message.content || "Translation failed.";
+      res.json({ translation });
+    } catch (error) {
+      console.error("Translation error:", error);
+      res.status(500).json({ error: "Failed to translate text" });
+    }
+  });
+
   app.get(api.books.list.path, async (req, res) => {
     const status = req.query.status as "purchased" | "wishlist" | undefined;
     const books = await storage.getBooks(status);

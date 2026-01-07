@@ -24,17 +24,38 @@ interface BookDetailsDrawerProps {
 
 export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [translatedNotes, setTranslatedNotes] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   // Reset and auto-generate summary when book changes
   useEffect(() => {
     setAiSummary(null);
+    setTranslatedNotes(null);
     setLoadingAi(false);
+    setTranslating(false);
     
     if (book) {
       generateSummary();
     }
   }, [book?.id]);
+
+  const translateNotes = async () => {
+    if (!book?.notes) return;
+    setTranslating(true);
+    try {
+      const res = await apiRequest('POST', '/api/translate', { 
+        text: book.notes,
+        targetLanguage: 'English'
+      });
+      const data = await res.json();
+      setTranslatedNotes(data.translation);
+    } catch (error) {
+      console.error('Failed to translate:', error);
+    } finally {
+      setTranslating(false);
+    }
+  };
 
   const generateSummary = async () => {
     if (!book) return;
@@ -92,8 +113,27 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
 
           {book.notes && (
             <Stack gap="xs">
-              <Text fw={600}>Your Notes</Text>
+              <Group justify="space-between" align="center">
+                <Text fw={600}>Your Notes</Text>
+                {!translatedNotes && (
+                  <Button 
+                    variant="subtle" 
+                    size="compact-xs" 
+                    color="violet"
+                    onClick={translateNotes}
+                    loading={translating}
+                  >
+                    Translate
+                  </Button>
+                )}
+              </Group>
               <Text size="sm">{book.notes}</Text>
+              {translatedNotes && (
+                <Box p="xs" style={{ backgroundColor: 'var(--mantine-color-violet-light)', borderRadius: 'var(--mantine-radius-sm)' }}>
+                  <Text size="xs" fw={700} mb={4} c="violet">Translation:</Text>
+                  <Text size="sm" italic>{translatedNotes}</Text>
+                </Box>
+              )}
             </Stack>
           )}
 
