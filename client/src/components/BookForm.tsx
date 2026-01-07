@@ -139,14 +139,14 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
           {...form.getInputProps('notes')}
         />
 
-        <Group justify="flex-end" mt="md">
-          <Button variant="light" color="gray" onClick={onCancel}>
+        <Group justify="flex-end" mt="md" gap="sm">
+          <Button variant="outline" color="gray" onClick={onCancel}>
             Cancel
           </Button>
           <Button 
             type="submit" 
             loading={createBook.isPending}
-            bg="var(--primary)"
+            color="violet"
           >
             Add
           </Button>
