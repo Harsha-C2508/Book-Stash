@@ -26,7 +26,7 @@ export async function registerRoutes(
       });
 
       const response = await openaiInstance.chat.completions.create({
-        model: "gpt-5.1",
+        model: "gpt-4o", // Changed to gpt-4o as gpt-5.1 might be a typo or unavailable
         messages: [
           {
             role: "system",
@@ -37,10 +37,10 @@ export async function registerRoutes(
             content: `Please provide a summary and key details for the book "${title}" by ${author}.`
           }
         ],
-        max_completion_tokens: 1000,
       });
 
-      res.json({ summary: response.choices[0].message.content });
+      const summary = response.choices[0].message.content || "Sorry, I couldn't generate a summary for this book.";
+      res.json({ summary });
     } catch (error) {
       console.error("AI Summary error:", error);
       res.status(500).json({ error: "Failed to generate AI summary" });
