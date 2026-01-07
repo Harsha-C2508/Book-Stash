@@ -59,7 +59,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
       onClose={onClose} 
       title="Book Details" 
       position="right" 
-      size="md"
+      size="xl"
       padding="xl"
     >
       {book && (
