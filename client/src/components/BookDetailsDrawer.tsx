@@ -99,8 +99,12 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
 
           <Divider />
 
-          <Stack gap="md" pos="relative">
-            <LoadingOverlay visible={loadingAi} />
+          <Stack gap="md" pos="relative" minH={150}>
+            <LoadingOverlay 
+              visible={loadingAi} 
+              overlayProps={{ blur: 2 }}
+              loaderProps={{ color: 'violet' }}
+            />
             <Group justify="space-between">
               <Title order={4}>AI Summary & Details</Title>
             </Group>
@@ -113,7 +117,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
               </ScrollArea>
             ) : !loadingAi && (
               <Text size="sm" c="dimmed">
-                Failed to generate summary.
+                {loadingAi ? 'Generating summary...' : 'Failed to generate summary.'}
               </Text>
             )}
           </Stack>
