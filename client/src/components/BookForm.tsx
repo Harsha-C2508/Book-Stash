@@ -148,7 +148,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
             loading={createBook.isPending}
             bg="var(--primary)"
           >
-            Add Book
+            Add
           </Button>
         </Group>
       </Stack>
