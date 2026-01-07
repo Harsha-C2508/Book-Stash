@@ -14,11 +14,12 @@ import {
   Indicator,
   Menu,
   ActionIcon,
-  Stack
+  Stack,
+  TextInput
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash } from 'lucide-react';
+import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash, Search } from 'lucide-react';
 import { useBooks } from '@/hooks/use-books';
 import { BookCard } from '@/components/BookCard';
 import { BookForm } from '@/components/BookForm';
@@ -38,6 +39,7 @@ export default function Dashboard() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [history, setHistory] = useState<NotificationMessage[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('notifications_history');
@@ -95,6 +97,21 @@ export default function Dashboard() {
   }, [wishlistBooks]);
 
   const isLoading = loadingPurchased || loadingWishlist;
+
+  const filterBooks = (books?: Book[]) => {
+    if (!books) return [];
+    if (!searchQuery.trim()) return books;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return books.filter(book => 
+      book.title.toLowerCase().includes(query) ||
+      book.author.toLowerCase().includes(query) ||
+      (book.purchaseDate && book.purchaseDate.includes(query))
+    );
+  };
+
+  const filteredPurchased = filterBooks(purchasedBooks);
+  const filteredWishlist = filterBooks(wishlistBooks);
   
   // Calculate stats
   const totalPurchased = purchasedBooks?.length || 0;
@@ -171,59 +188,77 @@ export default function Dashboard() {
       </div>
 
       <Container size="lg">
-        <Tabs 
-          value={activeTab} 
-          onChange={setActiveTab} 
-          variant="outline"
-          radius="md"
-          classNames={{
-            root: "bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden",
-            list: "bg-gray-50 p-1 gap-1 border-b border-gray-100",
-            tab: "data-[active]:bg-white data-[active]:shadow-sm data-[active]:text-violet-700 h-12 px-6 text-gray-500 font-medium border-0",
-            panel: "p-6 min-h-[50vh]"
-          }}
-        >
-          <Tabs.List>
-            <Tabs.Tab value="purchased" leftSection={<LibraryBig size={16} />}>
-              Purchased ({totalPurchased})
-            </Tabs.Tab>
-            <Tabs.Tab value="wishlist" leftSection={<ShoppingBag size={16} />}>
-              Wishlist ({totalWishlist})
-            </Tabs.Tab>
-          </Tabs.List>
+        <Stack gap="lg">
+          <TextInput
+            placeholder="Search by title, author, or year..."
+            size="md"
+            radius="md"
+            leftSection={<Search size={18} />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            className="shadow-sm"
+            styles={{
+              input: {
+                backgroundColor: 'white',
+                border: '1px solid hsl(var(--border))'
+              }
+            }}
+          />
 
-          <Tabs.Panel value="purchased">
-            {isLoading ? (
-              <Center py={50}><Loader color="violet" /></Center>
-            ) : purchasedBooks?.length === 0 ? (
-              <EmptyState type="purchased" onAdd={open} />
-            ) : (
-              <Grid>
-                {purchasedBooks?.map((book) => (
-                  <Grid.Col key={book.id} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
-                    <BookCard book={book} onOpenDetails={setSelectedBook} />
-                  </Grid.Col>
-                ))}
-              </Grid>
-            )}
-          </Tabs.Panel>
+          <Tabs 
+            value={activeTab} 
+            onChange={setActiveTab} 
+            variant="outline"
+            radius="md"
+            classNames={{
+              root: "bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden",
+              list: "bg-gray-50 p-1 gap-1 border-b border-gray-100",
+              tab: "data-[active]:bg-white data-[active]:shadow-sm data-[active]:text-violet-700 h-12 px-6 text-gray-500 font-medium border-0",
+              panel: "p-6 min-h-[50vh]"
+            }}
+          >
+            <Tabs.List>
+              <Tabs.Tab value="purchased" leftSection={<LibraryBig size={16} />}>
+                Purchased ({totalPurchased})
+              </Tabs.Tab>
+              <Tabs.Tab value="wishlist" leftSection={<ShoppingBag size={16} />}>
+                Wishlist ({totalWishlist})
+              </Tabs.Tab>
+            </Tabs.List>
 
-          <Tabs.Panel value="wishlist">
-             {isLoading ? (
-              <Center py={50}><Loader color="violet" /></Center>
-            ) : wishlistBooks?.length === 0 ? (
-              <EmptyState type="wishlist" onAdd={open} />
-            ) : (
-              <Grid>
-                {wishlistBooks?.map((book) => (
-                  <Grid.Col key={book.id} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
-                    <BookCard book={book} onOpenDetails={setSelectedBook} />
-                  </Grid.Col>
-                ))}
-              </Grid>
-            )}
-          </Tabs.Panel>
-        </Tabs>
+            <Tabs.Panel value="purchased">
+              {isLoading ? (
+                <Center py={50}><Loader color="violet" /></Center>
+              ) : filteredPurchased.length === 0 ? (
+                <EmptyState type="purchased" onAdd={open} isSearching={!!searchQuery} />
+              ) : (
+                <Grid>
+                  {filteredPurchased.map((book) => (
+                    <Grid.Col key={book.id} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
+                      <BookCard book={book} onOpenDetails={setSelectedBook} />
+                    </Grid.Col>
+                  ))}
+                </Grid>
+              )}
+            </Tabs.Panel>
+
+            <Tabs.Panel value="wishlist">
+               {isLoading ? (
+                <Center py={50}><Loader color="violet" /></Center>
+              ) : filteredWishlist.length === 0 ? (
+                <EmptyState type="wishlist" onAdd={open} isSearching={!!searchQuery} />
+              ) : (
+                <Grid>
+                  {filteredWishlist.map((book) => (
+                    <Grid.Col key={book.id} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
+                      <BookCard book={book} onOpenDetails={setSelectedBook} />
+                    </Grid.Col>
+                  ))}
+                </Grid>
+              )}
+            </Tabs.Panel>
+          </Tabs>
+        </Stack>
       </Container>
 
       <Modal 
@@ -245,7 +280,20 @@ export default function Dashboard() {
   );
 }
 
-function EmptyState({ type, onAdd }: { type: 'purchased' | 'wishlist'; onAdd: () => void }) {
+function EmptyState({ type, onAdd, isSearching }: { type: 'purchased' | 'wishlist'; onAdd: () => void; isSearching?: boolean }) {
+  if (isSearching) {
+    return (
+      <Center py={60} className="flex-col text-center">
+        <Title order={3} mb="sm" className="font-display text-gray-700">
+          No matches found
+        </Title>
+        <Text c="dimmed" maw={400}>
+          Try searching with different keywords or check your spelling.
+        </Text>
+      </Center>
+    );
+  }
+
   return (
     <Center py={60} className="flex-col text-center">
       <div className="bg-gray-50 p-6 rounded-full mb-4">
