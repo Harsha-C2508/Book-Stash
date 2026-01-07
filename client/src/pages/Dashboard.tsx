@@ -13,7 +13,8 @@ import {
   ThemeIcon,
   Indicator,
   Menu,
-  ActionIcon
+  ActionIcon,
+  Stack
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
