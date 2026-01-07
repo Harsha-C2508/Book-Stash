@@ -184,38 +184,39 @@ export default function Dashboard() {
                 )}
 
                 <Menu shadow="md" width={300} position="bottom-end" onClose={() => setUnreadCount(0)}>
-                <Menu.Target>
-                  <Indicator label={unreadCount} size={16} disabled={unreadCount === 0} color="red">
-                    <ActionIcon variant="white" color="violet" size="lg" radius="md">
-                      <Bell size={20} />
-                    </ActionIcon>
-                  </Indicator>
-                </Menu.Target>
-
-                <Menu.Dropdown p="xs">
-                  <Group justify="space-between" mb="xs" px="xs">
-                    <Text fw={600} size="sm">Notifications</Text>
-                    {history.length > 0 && (
-                      <ActionIcon variant="subtle" color="gray" size="sm" onClick={clearNotifications}>
-                        <Trash size={14} />
+                  <Menu.Target>
+                    <Indicator label={unreadCount} size={16} disabled={unreadCount === 0} color="red">
+                      <ActionIcon variant="white" color="violet" size="lg" radius="md">
+                        <Bell size={20} />
                       </ActionIcon>
+                    </Indicator>
+                  </Menu.Target>
+
+                  <Menu.Dropdown p="xs">
+                    <Group justify="space-between" mb="xs" px="xs">
+                      <Text fw={600} size="sm">Notifications</Text>
+                      {history.length > 0 && (
+                        <ActionIcon variant="subtle" color="gray" size="sm" onClick={clearNotifications}>
+                          <Trash size={14} />
+                        </ActionIcon>
+                      )}
+                    </Group>
+                    <Menu.Divider />
+                    {history.length === 0 ? (
+                      <Text size="xs" c="dimmed" ta="center" py="xl">No new notifications</Text>
+                    ) : (
+                      history.map((notif) => (
+                        <Menu.Item key={notif.id} p="xs">
+                          <Stack gap={2}>
+                            <Text fw={500} size="xs">{notif.title}</Text>
+                            <Text size="xs" c="dimmed" lineClamp={2}>{notif.message}</Text>
+                          </Stack>
+                        </Menu.Item>
+                      ))
                     )}
-                  </Group>
-                  <Menu.Divider />
-                  {history.length === 0 ? (
-                    <Text size="xs" c="dimmed" ta="center" py="xl">No new notifications</Text>
-                  ) : (
-                    history.map((notif) => (
-                      <Menu.Item key={notif.id} p="xs">
-                        <Stack gap={2}>
-                          <Text fw={500} size="xs">{notif.title}</Text>
-                          <Text size="xs" c="dimmed" lineClamp={2}>{notif.message}</Text>
-                        </Stack>
-                      </Menu.Item>
-                    ))
-                  )}
-                </Menu.Dropdown>
-              </Menu>
+                  </Menu.Dropdown>
+                </Menu>
+              </Group>
 
               <Button 
                 leftSection={<Plus size={18} />}
