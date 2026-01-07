@@ -26,10 +26,14 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
 
-  // Reset summary when book changes
+  // Reset and auto-generate summary when book changes
   useEffect(() => {
     setAiSummary(null);
     setLoadingAi(false);
+    
+    if (book) {
+      generateSummary();
+    }
   }, [book?.id]);
 
   const generateSummary = async () => {
@@ -99,11 +103,6 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
             <LoadingOverlay visible={loadingAi} />
             <Group justify="space-between">
               <Title order={4}>AI Summary & Details</Title>
-              {!aiSummary && (
-                <Button size="xs" variant="light" onClick={generateSummary}>
-                  Generate with AI
-                </Button>
-              )}
             </Group>
             
             {aiSummary ? (
@@ -112,9 +111,9 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
                   {aiSummary}
                 </Text>
               </ScrollArea>
-            ) : (
+            ) : !loadingAi && (
               <Text size="sm" c="dimmed">
-                Click the button to get AI-generated insights about this book.
+                Failed to generate summary.
               </Text>
             )}
           </Stack>
