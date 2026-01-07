@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [history, setHistory] = useState<NotificationMessage[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpened, setSearchOpened] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('notifications_history');
@@ -138,7 +139,51 @@ export default function Dashboard() {
             </Group>
             
             <Group gap="md">
-              <Menu shadow="md" width={300} position="bottom-end" onClose={() => setUnreadCount(0)}>
+              <Group gap="xs">
+                {searchOpened ? (
+                  <TextInput
+                    placeholder="Search books..."
+                    size="sm"
+                    radius="md"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                    autoFocus
+                    onBlur={() => {
+                      if (!searchQuery) setSearchOpened(false);
+                    }}
+                    rightSection={
+                      <ActionIcon 
+                        variant="subtle" 
+                        color="gray" 
+                        size="sm" 
+                        onClick={() => {
+                          setSearchQuery('');
+                          setSearchOpened(false);
+                        }}
+                      >
+                        <Trash size={14} />
+                      </ActionIcon>
+                    }
+                    styles={{
+                      input: {
+                        width: '200px',
+                        transition: 'width 0.2s ease',
+                      }
+                    }}
+                  />
+                ) : (
+                  <ActionIcon 
+                    variant="white" 
+                    color="violet" 
+                    size="lg" 
+                    radius="md"
+                    onClick={() => setSearchOpened(true)}
+                  >
+                    <Search size={20} />
+                  </ActionIcon>
+                )}
+
+                <Menu shadow="md" width={300} position="bottom-end" onClose={() => setUnreadCount(0)}>
                 <Menu.Target>
                   <Indicator label={unreadCount} size={16} disabled={unreadCount === 0} color="red">
                     <ActionIcon variant="white" color="violet" size="lg" radius="md">
@@ -189,22 +234,6 @@ export default function Dashboard() {
 
       <Container size="lg">
         <Stack gap="lg">
-          <TextInput
-            placeholder="Search by title, author, or year..."
-            size="md"
-            radius="md"
-            leftSection={<Search size={18} />}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.currentTarget.value)}
-            className="shadow-sm"
-            styles={{
-              input: {
-                backgroundColor: 'white',
-                border: '1px solid hsl(var(--border))'
-              }
-            }}
-          />
-
           <Tabs 
             value={activeTab} 
             onChange={setActiveTab} 
