@@ -99,7 +99,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
 
           <Divider />
 
-          <Stack gap="md" pos="relative" minH={150}>
+          <Stack gap="md" pos="relative" mih={150}>
             <LoadingOverlay 
               visible={loadingAi} 
               overlayProps={{ blur: 2 }}
