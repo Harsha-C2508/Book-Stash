@@ -15,7 +15,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { type Book } from '@shared/schema';
 import { apiRequest } from '@/lib/queryClient';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface BookDetailsDrawerProps {
   book: Book | null;
@@ -25,6 +25,12 @@ interface BookDetailsDrawerProps {
 export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
+
+  // Reset summary when book changes
+  useEffect(() => {
+    setAiSummary(null);
+    setLoadingAi(false);
+  }, [book?.id]);
 
   const generateSummary = async () => {
     if (!book) return;
