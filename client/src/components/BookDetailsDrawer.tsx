@@ -12,7 +12,6 @@ import {
   Divider,
   ScrollArea
 } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
 import { type Book } from '@shared/schema';
 import { apiRequest } from '@/lib/queryClient';
 import { useState, useEffect } from 'react';
