@@ -124,7 +124,8 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                   if (uploadResponse?.objectPath) {
                     form.setFieldValue('imageUrl', uploadResponse.objectPath);
                     // Also set coverUrl to the serving URL so it shows in the UI
-                    form.setFieldValue('coverUrl', uploadResponse.objectPath);
+                    const publicUrl = `/objects${uploadResponse.objectPath}`;
+                    form.setFieldValue('coverUrl', publicUrl);
                   }
                 }
               }}
