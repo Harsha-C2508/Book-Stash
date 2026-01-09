@@ -8,7 +8,8 @@ import {
   Group, 
   Stack,
   Text,
-  Paper
+  Paper,
+  Image as MantineImage
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { useCreateBook } from '@/hooks/use-books';
@@ -97,7 +98,13 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               clearable
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
               onChange={(date: any) => {
-                form.setFieldValue('purchaseDate', date instanceof Date ? date.toISOString().split('T')[0] : '');
+                if (date instanceof Date && !isNaN(date.getTime())) {
+                  const formattedDate = date.toISOString().split('T')[0];
+                  console.log('Setting purchase date:', formattedDate);
+                  form.setFieldValue('purchaseDate', formattedDate);
+                } else {
+                  form.setFieldValue('purchaseDate', '');
+                }
               }}
             />
             
@@ -130,6 +137,12 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                     console.log('Upload complete. Public URL:', publicUrl);
                     form.setFieldValue('imageUrl', uploadResponse.objectPath);
                     form.setFieldValue('coverUrl', publicUrl);
+                    // Update form values directly to ensure re-render
+                    form.setValues({
+                      ...form.values,
+                      imageUrl: uploadResponse.objectPath,
+                      coverUrl: publicUrl
+                    });
                   }
                 }
               }}
@@ -140,9 +153,18 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
           </Group>
           {form.values.imageUrl && (
             <Paper withBorder p="xs" radius="sm">
-              <Text size="xs" c="dimmed" truncate>
-                Uploaded: {form.values.imageUrl}
-              </Text>
+              <Stack gap="xs">
+                <MantineImage 
+                  src={form.values.coverUrl} 
+                  h={100} 
+                  fit="contain" 
+                  radius="xs"
+                  fallbackSrc="https://placehold.co/400x600?text=Preview+Error"
+                />
+                <Text size="xs" c="dimmed" truncate>
+                  Uploaded: {form.values.imageUrl}
+                </Text>
+              </Stack>
             </Paper>
           )}
         </Stack>
