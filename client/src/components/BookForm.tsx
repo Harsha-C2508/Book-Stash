@@ -50,6 +50,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
     const cleanedValues = {
       ...values,
       purchaseDate: values.purchaseDate || null,
+      coverUrl: values.coverUrl || null,
     };
 
     createBook.mutate(cleanedValues, {
@@ -93,7 +94,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               placeholder="Pick date"
               clearable
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
-              onChange={(date) => {
+              onChange={(date: Date | null | any) => {
                 const formattedDate = date instanceof Date && !isNaN(date.getTime()) 
                   ? date.toISOString().split('T')[0] 
                   : '';
