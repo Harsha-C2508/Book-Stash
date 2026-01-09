@@ -97,19 +97,18 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               placeholder="Pick date"
               clearable
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
-              onChange={(date: any) => {
+              onChange={(date: Date | null) => {
                 if (date instanceof Date && !isNaN(date.getTime())) {
-                  // Use local date format to avoid timezone shifts
                   const year = date.getFullYear();
                   const month = String(date.getMonth() + 1).padStart(2, '0');
                   const day = String(date.getDate()).padStart(2, '0');
                   const formattedDate = `${year}-${month}-${day}`;
-                  console.log('Setting purchase date:', formattedDate);
                   form.setFieldValue('purchaseDate', formattedDate);
                 } else {
                   form.setFieldValue('purchaseDate', '');
                 }
               }}
+              error={form.errors.purchaseDate}
             />
             
             <NumberInput
@@ -137,14 +136,11 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                 if (result.successful?.[0]) {
                   const uploadResponse = result.successful[0].response?.body as any;
                   if (uploadResponse?.objectPath) {
-                    const publicUrl = `/objects${uploadResponse.objectPath}`;
-                    console.log('Upload complete. Public URL:', publicUrl);
-                    // Update form values directly to ensure re-render
-                    form.setValues({
-                      ...form.values,
-                      imageUrl: uploadResponse.objectPath,
-                      coverUrl: publicUrl
-                    });
+                    // The objectPath already contains the /objects prefix
+                    const publicUrl = uploadResponse.objectPath;
+                    console.log('Upload complete. Setting URL:', publicUrl);
+                    form.setFieldValue('imageUrl', publicUrl);
+                    form.setFieldValue('coverUrl', publicUrl);
                   }
                 }
               }}
