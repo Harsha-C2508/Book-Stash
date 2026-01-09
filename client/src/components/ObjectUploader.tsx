@@ -90,6 +90,8 @@ export function ObjectUploader({
     <>
       <Button 
         type="button" 
+        variant="light"
+        color="violet"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

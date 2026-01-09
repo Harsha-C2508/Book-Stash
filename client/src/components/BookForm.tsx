@@ -131,10 +131,9 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                   }
                 }
               }}
+              buttonClassName="font-semibold shadow-sm hover:shadow-md transition-all"
             >
-              <Button type="button" variant="light" color="violet" leftSection={<IconUpload size={16} />}>
-                Upload
-              </Button>
+              Upload Cover
             </ObjectUploader>
           </Group>
           {form.values.imageUrl && (
