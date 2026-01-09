@@ -92,9 +92,13 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               label="Purchase Date"
               placeholder="Pick date"
               clearable
-              {...form.getInputProps('purchaseDate')}
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
-              onChange={(date) => form.setFieldValue('purchaseDate', date instanceof Date && !isNaN(date.getTime()) ? date.toISOString().split('T')[0] : '')}
+              onChange={(date) => {
+                const formattedDate = date instanceof Date && !isNaN(date.getTime()) 
+                  ? date.toISOString().split('T')[0] 
+                  : '';
+                form.setFieldValue('purchaseDate', formattedDate);
+              }}
             />
             
             <NumberInput

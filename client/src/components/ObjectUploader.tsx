@@ -82,12 +82,21 @@ export function ObjectUploader({
       })
       .on("complete", (result) => {
         onComplete?.(result);
+        setShowModal(false);
       })
   );
 
   return (
-    <div>
-      <Button type="button" onClick={() => setShowModal(true)} className={buttonClassName}>
+    <>
+      <Button 
+        type="button" 
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowModal(true);
+        }} 
+        className={buttonClassName}
+      >
         {children}
       </Button>
 
@@ -97,7 +106,7 @@ export function ObjectUploader({
         onRequestClose={() => setShowModal(false)}
         proudlyDisplayPoweredByUppy={false}
       />
-    </div>
+    </>
   );
 }
 
