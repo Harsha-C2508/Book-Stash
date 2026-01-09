@@ -92,6 +92,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               label="Purchase Date"
               placeholder="Pick date"
               clearable
+              {...form.getInputProps('purchaseDate')}
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
               onChange={(date) => form.setFieldValue('purchaseDate', date instanceof Date && !isNaN(date.getTime()) ? date.toISOString().split('T')[0] : '')}
             />
@@ -128,7 +129,9 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                 }
               }}
             >
-              Upload
+              <Button type="button" variant="light" color="violet" leftSection={<IconUpload size={16} />}>
+                Upload
+              </Button>
             </ObjectUploader>
           </Group>
           {form.values.imageUrl && (
