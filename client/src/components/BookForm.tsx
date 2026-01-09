@@ -50,8 +50,8 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
     // Convert empty strings to null for optional date fields to avoid DB errors
     const cleanedValues = {
       ...values,
-      purchaseDate: values.purchaseDate || null,
-      coverUrl: values.coverUrl || null,
+      purchaseDate: values.purchaseDate && values.purchaseDate.trim() !== '' ? values.purchaseDate : null,
+      coverUrl: values.coverUrl && values.coverUrl.trim() !== '' ? values.coverUrl : null,
     };
 
     console.log('Submitting book with values:', cleanedValues);
@@ -99,7 +99,11 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
               onChange={(date: any) => {
                 if (date instanceof Date && !isNaN(date.getTime())) {
-                  const formattedDate = date.toISOString().split('T')[0];
+                  // Use local date format to avoid timezone shifts
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const formattedDate = `${year}-${month}-${day}`;
                   console.log('Setting purchase date:', formattedDate);
                   form.setFieldValue('purchaseDate', formattedDate);
                 } else {
@@ -135,8 +139,6 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                   if (uploadResponse?.objectPath) {
                     const publicUrl = `/objects${uploadResponse.objectPath}`;
                     console.log('Upload complete. Public URL:', publicUrl);
-                    form.setFieldValue('imageUrl', uploadResponse.objectPath);
-                    form.setFieldValue('coverUrl', publicUrl);
                     // Update form values directly to ensure re-render
                     form.setValues({
                       ...form.values,
