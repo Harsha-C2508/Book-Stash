@@ -53,6 +53,8 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
       coverUrl: values.coverUrl || null,
     };
 
+    console.log('Submitting book with values:', cleanedValues);
+
     createBook.mutate(cleanedValues, {
       onSuccess: () => {
         form.reset();
@@ -124,9 +126,9 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                 if (result.successful?.[0]) {
                   const uploadResponse = result.successful[0].response?.body as any;
                   if (uploadResponse?.objectPath) {
-                    form.setFieldValue('imageUrl', uploadResponse.objectPath);
-                    // Also set coverUrl to the serving URL so it shows in the UI
                     const publicUrl = `/objects${uploadResponse.objectPath}`;
+                    console.log('Upload complete. Public URL:', publicUrl);
+                    form.setFieldValue('imageUrl', uploadResponse.objectPath);
                     form.setFieldValue('coverUrl', publicUrl);
                   }
                 }
