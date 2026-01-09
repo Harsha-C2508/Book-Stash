@@ -45,7 +45,14 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
 
   const handleSubmit = (values: InsertBook) => {
     if (createBook.isPending) return;
-    createBook.mutate(values, {
+    
+    // Convert empty strings to null for optional date fields to avoid DB errors
+    const cleanedValues = {
+      ...values,
+      purchaseDate: values.purchaseDate || null,
+    };
+
+    createBook.mutate(cleanedValues, {
       onSuccess: () => {
         form.reset();
         onSuccess?.();
