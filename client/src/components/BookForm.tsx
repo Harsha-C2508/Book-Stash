@@ -44,6 +44,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
   });
 
   const handleSubmit = (values: InsertBook) => {
+    if (createBook.isPending) return;
     createBook.mutate(values, {
       onSuccess: () => {
         form.reset();
@@ -146,6 +147,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
           <Button 
             type="submit" 
             loading={createBook.isPending}
+            disabled={createBook.isPending}
             color="violet"
           >
             Add
