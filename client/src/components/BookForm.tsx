@@ -98,7 +98,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               placeholder="Pick date"
               clearable
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
-              onChange={(date: unknown) => {
+              onChange={(date: Date | null) => {
                 console.log('DateInput onChange fired with:', date);
                 if (date instanceof Date && !isNaN(date.getTime())) {
                   const year = date.getFullYear();
@@ -107,9 +107,9 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                   const formattedDate = `${year}-${month}-${day}`;
                   console.log('Setting purchaseDate field to:', formattedDate);
                   form.setFieldValue('purchaseDate', formattedDate);
-                } else {
-                  console.log('Setting purchaseDate field to empty string');
-                  form.setFieldValue('purchaseDate', '');
+                } else if (date === null) {
+                  console.log('Setting purchaseDate field to null (cleared)');
+                  form.setFieldValue('purchaseDate', null);
                 }
               }}
               error={form.errors.purchaseDate}
