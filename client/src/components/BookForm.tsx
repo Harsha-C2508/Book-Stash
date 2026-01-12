@@ -47,13 +47,12 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
   const handleSubmit = (values: InsertBook) => {
     if (createBook.isPending) return;
     
-    console.log('Raw form values on submit:', values);
-    
-    // Convert empty strings to null for optional date fields to avoid DB errors
+    // Convert empty strings to null for optional fields to avoid DB errors
     const cleanedValues = {
       ...values,
-      purchaseDate: values.purchaseDate && values.purchaseDate.trim() !== '' ? values.purchaseDate : null,
-      coverUrl: values.coverUrl && values.coverUrl.trim() !== '' ? values.coverUrl : null,
+      purchaseDate: values.purchaseDate && String(values.purchaseDate).trim() !== '' ? values.purchaseDate : null,
+      coverUrl: values.coverUrl && String(values.coverUrl).trim() !== '' ? values.coverUrl : null,
+      imageUrl: values.imageUrl && String(values.imageUrl).trim() !== '' ? values.imageUrl : null,
     };
 
     console.log('Submitting book with cleaned values:', cleanedValues);
