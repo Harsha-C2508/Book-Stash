@@ -47,6 +47,8 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
   const handleSubmit = (values: InsertBook) => {
     if (createBook.isPending) return;
     
+    console.log('Raw form values on submit:', values);
+    
     // Convert empty strings to null for optional date fields to avoid DB errors
     const cleanedValues = {
       ...values,
@@ -54,7 +56,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
       coverUrl: values.coverUrl && values.coverUrl.trim() !== '' ? values.coverUrl : null,
     };
 
-    console.log('Submitting book with values:', cleanedValues);
+    console.log('Submitting book with cleaned values:', cleanedValues);
 
     createBook.mutate(cleanedValues, {
       onSuccess: () => {
@@ -98,14 +100,23 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               clearable
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
               onChange={(date: Date | null) => {
+                console.log('DateInput onChange fired with:', date);
                 if (date instanceof Date && !isNaN(date.getTime())) {
                   const year = date.getFullYear();
                   const month = String(date.getMonth() + 1).padStart(2, '0');
                   const day = String(date.getDate()).padStart(2, '0');
                   const formattedDate = `${year}-${month}-${day}`;
-                  form.setFieldValue('purchaseDate', formattedDate);
+                  console.log('Setting purchaseDate field to:', formattedDate);
+                  form.setValues({
+                    ...form.values,
+                    purchaseDate: formattedDate
+                  });
                 } else {
-                  form.setFieldValue('purchaseDate', '');
+                  console.log('Setting purchaseDate field to empty string');
+                  form.setValues({
+                    ...form.values,
+                    purchaseDate: ''
+                  });
                 }
               }}
               error={form.errors.purchaseDate}
@@ -133,14 +144,17 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
             <ObjectUploader
               onGetUploadParameters={getUploadParameters}
               onComplete={(result) => {
+                console.log('Uploader complete result:', result);
                 if (result.successful?.[0]) {
                   const uploadResponse = result.successful[0].response?.body as any;
                   if (uploadResponse?.objectPath) {
-                    // The objectPath already contains the /objects prefix
                     const publicUrl = uploadResponse.objectPath;
-                    console.log('Upload complete. Setting URL:', publicUrl);
-                    form.setFieldValue('imageUrl', publicUrl);
-                    form.setFieldValue('coverUrl', publicUrl);
+                    console.log('Setting image values to:', publicUrl);
+                    form.setValues({
+                      ...form.values,
+                      imageUrl: publicUrl,
+                      coverUrl: publicUrl
+                    });
                   }
                 }
               }}
