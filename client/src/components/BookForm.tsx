@@ -98,7 +98,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               placeholder="Pick date"
               clearable
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
-              onChange={(date: Date | null) => {
+              onChange={(date: unknown) => {
                 console.log('DateInput onChange fired with:', date);
                 if (date instanceof Date && !isNaN(date.getTime())) {
                   const year = date.getFullYear();
@@ -106,16 +106,10 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                   const day = String(date.getDate()).padStart(2, '0');
                   const formattedDate = `${year}-${month}-${day}`;
                   console.log('Setting purchaseDate field to:', formattedDate);
-                  form.setValues({
-                    ...form.values,
-                    purchaseDate: formattedDate
-                  });
+                  form.setFieldValue('purchaseDate', formattedDate);
                 } else {
                   console.log('Setting purchaseDate field to empty string');
-                  form.setValues({
-                    ...form.values,
-                    purchaseDate: ''
-                  });
+                  form.setFieldValue('purchaseDate', '');
                 }
               }}
               error={form.errors.purchaseDate}
@@ -157,7 +151,7 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
                   }
                 }
               }}
-              buttonClassName="font-semibold shadow-sm hover:shadow-md transition-all"
+              buttonClassName="font-semibold shadow-sm hover-elevate active-elevate-2 transition-all"
             >
               Upload Cover
             </ObjectUploader>
