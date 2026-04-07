@@ -16,7 +16,6 @@ import { useCreateBook } from '@/hooks/use-books';
 import { type InsertBook } from '@shared/schema';
 import { ObjectUploader } from './ObjectUploader';
 import { useUpload } from '@/hooks/use-upload';
-import { IconUpload } from '@tabler/icons-react';
 
 interface BookFormProps {
   onSuccess?: () => void;
@@ -54,8 +53,6 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
       coverUrl: values.coverUrl && String(values.coverUrl).trim() !== '' ? values.coverUrl : null,
       imageUrl: values.imageUrl && String(values.imageUrl).trim() !== '' ? values.imageUrl : null,
     };
-
-    console.log('Submitting book with cleaned values:', cleanedValues);
 
     createBook.mutate(cleanedValues, {
       onSuccess: () => {
@@ -98,18 +95,19 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               placeholder="Pick date"
               clearable
               value={form.values.purchaseDate ? new Date(form.values.purchaseDate) : null}
-              onChange={(date: unknown) => {
-                console.log('DateInput onChange fired with:', date);
-                if (date instanceof Date && !isNaN(date.getTime())) {
+              onChange={(date) => {
+                if (!date) {
+                  form.setFieldValue('purchaseDate', null);
+                } else if (typeof date === 'string') {
+                  // Mantine sometimes passes a string directly
+                  form.setFieldValue('purchaseDate', date.trim() || null);
+                } else if (date instanceof Date && !isNaN(date.getTime())) {
                   // Format as YYYY-MM-DD using local time to match what user sees
                   const year = date.getFullYear();
                   const month = String(date.getMonth() + 1).padStart(2, '0');
                   const day = String(date.getDate()).padStart(2, '0');
-                  const formattedDate = `${year}-${month}-${day}`;
-                  console.log('Setting purchaseDate field to:', formattedDate);
-                  form.setFieldValue('purchaseDate', formattedDate);
+                  form.setFieldValue('purchaseDate', `${year}-${month}-${day}`);
                 } else {
-                  console.log('Setting purchaseDate field to null (cleared or invalid)');
                   form.setFieldValue('purchaseDate', null);
                 }
               }}
@@ -138,17 +136,12 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
             <ObjectUploader
               onGetUploadParameters={getUploadParameters}
               onComplete={(result) => {
-                console.log('Uploader complete result:', result);
                 if (result.successful?.[0]) {
                   const uploadResponse = result.successful[0].response?.body as any;
                   if (uploadResponse?.objectPath) {
                     const publicUrl = uploadResponse.objectPath;
-                    console.log('Setting image values to:', publicUrl);
-                    form.setValues({
-                      ...form.values,
-                      imageUrl: publicUrl,
-                      coverUrl: publicUrl
-                    });
+                    form.setFieldValue('imageUrl', publicUrl);
+                    form.setFieldValue('coverUrl', publicUrl);
                   }
                 }
               }}

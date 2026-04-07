@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import Uppy from "@uppy/core";
 import type { UppyFile, UploadResult } from "@uppy/core";
@@ -27,13 +27,21 @@ interface ObjectUploaderProps {
 
 export function ObjectUploader({
   maxNumberOfFiles = 1,
-  maxFileSize = 10485760, // 10MB default
+  maxFileSize = 10485760,
   onGetUploadParameters,
   onComplete,
   buttonClassName,
   children,
 }: ObjectUploaderProps) {
   const [showModal, setShowModal] = useState(false);
+
+  // Keep a ref to onComplete so the Uppy handler always calls the latest version,
+  // even though the handler is only registered once at initialization.
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
   const [uppy] = useState(() =>
     new Uppy({
       restrictions: {
@@ -47,21 +55,21 @@ export function ObjectUploader({
         getUploadParameters: onGetUploadParameters,
       })
       .on("complete", (result) => {
-        onComplete?.(result);
+        onCompleteRef.current?.(result);
         setShowModal(false);
       })
   );
 
   return (
     <>
-      <Button 
-        type="button" 
+      <Button
+        type="button"
         variant="outline"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setShowModal(true);
-        }} 
+        }}
         className={buttonClassName}
       >
         {children}
@@ -76,4 +84,3 @@ export function ObjectUploader({
     </>
   );
 }
-
