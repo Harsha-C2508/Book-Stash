@@ -215,7 +215,7 @@ npm start
 
 ---
 
-## Seed Data
+## Seed Data 
 
 On first run, if the database is empty, three sample books are automatically inserted:
 - *The Pragmatic Programmer* by David Thomas & Andrew Hunt — Purchased, rated 5
