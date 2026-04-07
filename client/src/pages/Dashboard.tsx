@@ -19,8 +19,9 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash, Search } from 'lucide-react';
+import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash, Search, LogOut } from 'lucide-react';
 import { useBooks } from '@/hooks/use-books';
+import { useAuth } from '@/hooks/use-auth';
 import { BookCard } from '@/components/BookCard';
 import { BookForm } from '@/components/BookForm';
 import { BookDetailsDrawer } from '@/components/BookDetailsDrawer';
@@ -34,6 +35,7 @@ interface NotificationMessage {
 }
 
 export default function Dashboard() {
+  const { user, logoutMutation } = useAuth();
   const [activeTab, setActiveTab] = useState<string | null>('purchased');
   const [opened, { open, close }] = useDisclosure(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
@@ -228,6 +230,18 @@ export default function Dashboard() {
               >
                 Add Book
               </Button>
+
+              <ActionIcon
+                variant="white"
+                color="violet"
+                size="lg"
+                radius="md"
+                title={`Sign out (${user?.username})`}
+                loading={logoutMutation.isPending}
+                onClick={() => logoutMutation.mutate()}
+              >
+                <LogOut size={20} />
+              </ActionIcon>
             </Group>
           </Group>
         </Container>

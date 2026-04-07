@@ -5,9 +5,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { MantineProvider, createTheme } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import Dashboard from "@/pages/Dashboard";
-import NotFound from "@/pages/not-found";
+import AuthPage from "@/pages/auth-page";
+import { ProtectedRoute } from "./lib/protected-route";
+import { AuthProvider } from "@/hooks/use-auth";
 
-// Define Mantine theme to match our aesthetic
 const theme = createTheme({
   primaryColor: 'violet',
   fontFamily: 'Inter, sans-serif',
@@ -15,16 +16,13 @@ const theme = createTheme({
     fontFamily: 'Playfair Display, serif',
   },
   defaultRadius: 'md',
-  colors: {
-    // Custom shades if needed, otherwise using defaults
-  }
 });
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route component={NotFound} />
+      <ProtectedRoute path="/" component={Dashboard} />
+      <Route path="/auth" component={AuthPage} />
     </Switch>
   );
 }
@@ -35,7 +33,9 @@ function App() {
       <MantineProvider theme={theme}>
         <Notifications position="top-right" />
         <Toaster />
-        <Router />
+        <AuthProvider>
+          <Router />
+        </AuthProvider>
       </MantineProvider>
     </QueryClientProvider>
   );

@@ -8,6 +8,15 @@ A personal book collection management application that allows users to track pur
 
 Preferred communication style: Simple, everyday language.
 
+## Authentication
+- Username/password authentication using Passport.js with LocalStrategy
+- Passwords hashed with scrypt (Node.js crypto module)
+- Sessions stored in PostgreSQL via connect-pg-simple
+- `setupAuth` called in `server/index.ts` before route registration
+- Client: `useAuth` hook (TanStack Query + context) provides `user`, `loginMutation`, `registerMutation`, `logoutMutation`
+- `ProtectedRoute` redirects unauthenticated users to `/auth`
+- Auth page at `/auth` has a two-column layout: form on left, hero panel on right
+
 ## System Architecture
 
 ### Frontend Architecture

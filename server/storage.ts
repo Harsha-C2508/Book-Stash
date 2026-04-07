@@ -1,11 +1,18 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import {
   books,
+  users,
   type InsertBook,
   type UpdateBook,
-  type Book
+  type Book,
+  type User,
+  type InsertUser,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   getBooks(status?: "purchased" | "wishlist"): Promise<Book[]>;
@@ -13,9 +20,24 @@ export interface IStorage {
   createBook(book: InsertBook): Promise<Book>;
   updateBook(id: number, updates: UpdateBook): Promise<Book>;
   deleteBook(id: number): Promise<void>;
+
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
+  sessionStore: session.Store;
 }
 
 export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
+
+  constructor() {
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
+    });
+  }
+
   async getBooks(status?: "purchased" | "wishlist"): Promise<Book[]> {
     if (status) {
       return await db.select().from(books).where(eq(books.status, status)).orderBy(desc(books.createdAt));
@@ -43,6 +65,21 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBook(id: number): Promise<void> {
     await db.delete(books).where(eq(books.id, id));
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
   }
 }
 
