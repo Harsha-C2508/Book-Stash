@@ -24,7 +24,7 @@ interface BookFormProps {
 
 export function BookForm({ onSuccess, onCancel }: BookFormProps) {
   const createBook = useCreateBook();
-  const { getUploadParameters } = useUpload();
+  const { getUploadParameters, lastObjectPathRef } = useUpload();
 
   const form = useForm<InsertBook>({
     initialValues: {
@@ -137,9 +137,10 @@ export function BookForm({ onSuccess, onCancel }: BookFormProps) {
               onGetUploadParameters={getUploadParameters}
               onComplete={(result) => {
                 if (result.successful?.[0]) {
-                  const uploadResponse = result.successful[0].response?.body as any;
-                  if (uploadResponse?.objectPath) {
-                    const publicUrl = uploadResponse.objectPath;
+                  // objectPath comes from our presign response (captured in
+                  // lastObjectPathRef), not from GCS which returns an empty body.
+                  const publicUrl = lastObjectPathRef.current;
+                  if (publicUrl) {
                     form.setFieldValue('imageUrl', publicUrl);
                     form.setFieldValue('coverUrl', publicUrl);
                   }

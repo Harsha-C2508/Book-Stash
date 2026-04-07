@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { UppyFile } from "@uppy/core";
 
 interface UploadMetadata {
@@ -55,6 +55,9 @@ export function useUpload(options: UseUploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [progress, setProgress] = useState(0);
+  // Captures the objectPath returned by our server during the presign step.
+  // Uppy discards it (GCS returns an empty body on PUT), so we save it here.
+  const lastObjectPathRef = useRef<string | null>(null);
 
   /**
    * Request a presigned URL from the backend.
@@ -179,6 +182,10 @@ export function useUpload(options: UseUploadOptions = {}) {
       }
 
       const data = await response.json();
+      // Save objectPath so callers can retrieve it after the upload completes.
+      // Uppy only forwards the PUT response (empty from GCS), so this is the
+      // only opportunity to capture the server-assigned object path.
+      lastObjectPathRef.current = data.objectPath ?? null;
       return {
         method: "PUT",
         url: data.uploadURL,
@@ -191,6 +198,7 @@ export function useUpload(options: UseUploadOptions = {}) {
   return {
     uploadFile,
     getUploadParameters,
+    lastObjectPathRef,
     isUploading,
     error,
     progress,
