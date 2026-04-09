@@ -31,11 +31,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSuccess: (user: User) => {
       queryClient.setQueryData(["/api/user"], user);
     },
-    onError: (error: Error) => {
+    onError: () => {
       notifications.show({
         title: "Login failed",
-        message: error.message || "Invalid username or password",
+        message: "Username and password not found. If you are a new user, please create an account before logging in.",
         color: "red",
+        autoClose: 6000,
       });
     },
   });
