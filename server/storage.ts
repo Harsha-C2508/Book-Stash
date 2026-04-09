@@ -8,18 +8,18 @@ import {
   type User,
   type InsertUser,
 } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 
 const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
-  getBooks(status?: "purchased" | "wishlist"): Promise<Book[]>;
-  getBook(id: number): Promise<Book | undefined>;
+  getBooks(userId: number, status?: "purchased" | "wishlist"): Promise<Book[]>;
+  getBook(id: number, userId: number): Promise<Book | undefined>;
   createBook(book: InsertBook): Promise<Book>;
-  updateBook(id: number, updates: UpdateBook): Promise<Book>;
-  deleteBook(id: number): Promise<void>;
+  updateBook(id: number, userId: number, updates: UpdateBook): Promise<Book>;
+  deleteBook(id: number, userId: number): Promise<void>;
 
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -38,15 +38,20 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getBooks(status?: "purchased" | "wishlist"): Promise<Book[]> {
+  async getBooks(userId: number, status?: "purchased" | "wishlist"): Promise<Book[]> {
     if (status) {
-      return await db.select().from(books).where(eq(books.status, status)).orderBy(desc(books.createdAt));
+      return await db.select().from(books)
+        .where(and(eq(books.userId, userId), eq(books.status, status)))
+        .orderBy(desc(books.createdAt));
     }
-    return await db.select().from(books).orderBy(desc(books.createdAt));
+    return await db.select().from(books)
+      .where(eq(books.userId, userId))
+      .orderBy(desc(books.createdAt));
   }
 
-  async getBook(id: number): Promise<Book | undefined> {
-    const [book] = await db.select().from(books).where(eq(books.id, id));
+  async getBook(id: number, userId: number): Promise<Book | undefined> {
+    const [book] = await db.select().from(books)
+      .where(and(eq(books.id, id), eq(books.userId, userId)));
     return book;
   }
 
@@ -55,16 +60,16 @@ export class DatabaseStorage implements IStorage {
     return newBook;
   }
 
-  async updateBook(id: number, updates: UpdateBook): Promise<Book> {
+  async updateBook(id: number, userId: number, updates: UpdateBook): Promise<Book> {
     const [updated] = await db.update(books)
       .set(updates)
-      .where(eq(books.id, id))
+      .where(and(eq(books.id, id), eq(books.userId, userId)))
       .returning();
     return updated;
   }
 
-  async deleteBook(id: number): Promise<void> {
-    await db.delete(books).where(eq(books.id, id));
+  async deleteBook(id: number, userId: number): Promise<void> {
+    await db.delete(books).where(and(eq(books.id, id), eq(books.userId, userId)));
   }
 
   async getUser(id: number): Promise<User | undefined> {

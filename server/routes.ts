@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
@@ -8,16 +8,22 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Register object storage routes for file uploads
   registerObjectStorageRoutes(app);
   registerChatRoutes(app);
   registerImageRoutes(app);
 
-  app.post("/api/books/summary", async (req, res) => {
+  app.post("/api/books/summary", requireAuth, async (req, res) => {
     try {
       const { title, author } = req.body;
       const openaiInstance = new OpenAI({
@@ -26,7 +32,7 @@ export async function registerRoutes(
       });
 
       const response = await openaiInstance.chat.completions.create({
-        model: "gpt-4o", // Changed to gpt-4o as gpt-5.1 might be a typo or unavailable
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -47,7 +53,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/translate", async (req, res) => {
+  app.post("/api/translate", requireAuth, async (req, res) => {
     try {
       const { text, targetLanguage = "English" } = req.body;
       const openaiInstance = new OpenAI({
@@ -77,24 +83,27 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.books.list.path, async (req, res) => {
+  app.get(api.books.list.path, requireAuth, async (req, res) => {
+    const userId = req.user!.id;
     const status = req.query.status as "purchased" | "wishlist" | undefined;
-    const books = await storage.getBooks(status);
+    const books = await storage.getBooks(userId, status);
     res.json(books);
   });
 
-  app.get(api.books.get.path, async (req, res) => {
-    const book = await storage.getBook(Number(req.params.id));
+  app.get(api.books.get.path, requireAuth, async (req, res) => {
+    const userId = req.user!.id;
+    const book = await storage.getBook(Number(req.params.id), userId);
     if (!book) {
       return res.status(404).json({ message: 'Book not found' });
     }
     res.json(book);
   });
 
-  app.post(api.books.create.path, async (req, res) => {
+  app.post(api.books.create.path, requireAuth, async (req, res) => {
     try {
+      const userId = req.user!.id;
       const input = api.books.create.input.parse(req.body);
-      const book = await storage.createBook(input);
+      const book = await storage.createBook({ ...input, userId });
       res.status(201).json(book);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -107,10 +116,11 @@ export async function registerRoutes(
     }
   });
 
-  app.put(api.books.update.path, async (req, res) => {
+  app.put(api.books.update.path, requireAuth, async (req, res) => {
     try {
+      const userId = req.user!.id;
       const input = api.books.update.input.parse(req.body);
-      const book = await storage.updateBook(Number(req.params.id), input);
+      const book = await storage.updateBook(Number(req.params.id), userId, input);
       if (!book) {
         return res.status(404).json({ message: 'Book not found' });
       }
@@ -126,36 +136,11 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.books.delete.path, async (req, res) => {
-    await storage.deleteBook(Number(req.params.id));
+  app.delete(api.books.delete.path, requireAuth, async (req, res) => {
+    const userId = req.user!.id;
+    await storage.deleteBook(Number(req.params.id), userId);
     res.status(204).send();
   });
-
-  // Seed data
-  const existingBooks = await storage.getBooks();
-  if (existingBooks.length === 0) {
-    await storage.createBook({
-      title: "The Pragmatic Programmer",
-      author: "David Thomas & Andrew Hunt",
-      status: "purchased",
-      rating: 5,
-      notes: "A must read for every developer.",
-      purchaseDate: new Date().toISOString().split('T')[0]
-    });
-    await storage.createBook({
-      title: "Clean Code",
-      author: "Robert C. Martin",
-      status: "wishlist",
-      notes: "Heard good things about this one."
-    });
-    await storage.createBook({
-      title: "Project Hail Mary",
-      author: "Andy Weir",
-      status: "purchased",
-      rating: 5,
-      purchaseDate: "2024-01-15"
-    });
-  }
 
   return httpServer;
 }
