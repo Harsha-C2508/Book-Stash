@@ -160,6 +160,31 @@ export async function registerRoutes(
 
   app.get("/api/recommendations", requireAuth, async (req, res) => {
     try {
+      // Load user preferences so we can tailor the recommendations
+      const userId = (req.user as any).id;
+      const userRecord = await storage.getUser(userId);
+      const preferredLanguages: string[] = userRecord?.preferredLanguages ?? [];
+      const preferredGenres: string[] = userRecord?.preferredGenres ?? [];
+      const favoriteAuthors: string[] = userRecord?.favoriteAuthors ?? [];
+
+      const hasPreferences = preferredLanguages.length > 0 || preferredGenres.length > 0;
+
+      // Build a personalisation instruction to inject into the prompt
+      let personalisationNote = "";
+      if (hasPreferences) {
+        const parts: string[] = [];
+        if (preferredLanguages.length > 0) {
+          parts.push(`The user prefers books in these languages: ${preferredLanguages.join(", ")}. At least 70% of your recommendations MUST be in these languages.`);
+        }
+        if (preferredGenres.length > 0) {
+          parts.push(`The user enjoys these genres: ${preferredGenres.join(", ")}. Prioritise these genres heavily.`);
+        }
+        if (favoriteAuthors.length > 0) {
+          parts.push(`The user's favourite authors are: ${favoriteAuthors.join(", ")}. Recommend books by similar or related authors.`);
+        }
+        personalisationNote = "\n\nPersonalisation instructions:\n" + parts.join("\n");
+      }
+
       const openaiInstance = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -170,7 +195,7 @@ export async function registerRoutes(
         messages: [
           {
             role: "system",
-            content: `You are a world-class librarian and literary curator. Return a JSON object with a "books" array containing exactly 50 recently released (2020–2025) book recommendations spanning many different languages and cultures. Cover a wide variety of genres and at least 15 different languages/regions. Each object in the array must have these exact fields:
+            content: `You are a world-class librarian and literary curator. Return a JSON object with a "books" array containing exactly 50 recently released (2020–2025) book recommendations. Each object in the array must have these exact fields:
 - title: string (use the original language title)
 - searchTitle: string (the English translated title or romanized version — used for cover image search)
 - author: string
@@ -179,11 +204,13 @@ export async function registerRoutes(
 - year: string (publication year between 2020 and 2025)
 - genre: string (e.g. "Fiction", "Non-Fiction", "Mystery", "Science", "Biography", "Romance", "Thriller", "Poetry")
 
-Prefer well-known books that are likely to be indexed in Google Books. Return ONLY valid JSON with this structure: { "books": [...] }`
+Prefer well-known books that are likely to be indexed in Google Books. Return ONLY valid JSON with this structure: { "books": [...] }${personalisationNote}`
           },
           {
             role: "user",
-            content: "Give me 50 diverse recent book recommendations from different languages and cultures published between 2020 and 2025."
+            content: hasPreferences
+              ? "Give me 50 personalised recent book recommendations based on my language and genre preferences, published between 2020 and 2025."
+              : "Give me 50 diverse recent book recommendations from different languages and cultures published between 2020 and 2025."
           }
         ],
         response_format: { type: "json_object" },

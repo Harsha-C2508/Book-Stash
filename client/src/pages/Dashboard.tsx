@@ -17,6 +17,7 @@ import {
   Stack,
   TextInput,
   Alert,
+  Badge,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -294,15 +295,31 @@ export default function Dashboard() {
 
             <Tabs.Panel value="discover">
               <Stack gap="lg">
-                <Group justify="space-between" align="center">
-                  <div>
-                    <Title order={3} className="font-display text-gray-800">
-                      AI Book Recommendations
-                    </Title>
-                    <Text size="sm" c="dimmed">
-                      Latest releases curated across multiple languages and cultures
-                    </Text>
-                  </div>
+                <Group justify="space-between" align="flex-start">
+                  <Stack gap={6}>
+                    <Group gap="sm" align="center">
+                      <Title order={3} className="font-display text-gray-800">
+                        AI Book Recommendations
+                      </Title>
+                      {(user as any)?.preferredLanguages?.length > 0 && (
+                        <Badge color="violet" variant="filled" size="sm" leftSection={<Sparkles size={10} />}>
+                          Personalised
+                        </Badge>
+                      )}
+                    </Group>
+                    {(user as any)?.preferredLanguages?.length > 0 ? (
+                      <Group gap="xs" wrap="wrap">
+                        <Text size="xs" c="dimmed">Based on your languages:</Text>
+                        {((user as any).preferredLanguages as string[]).map((lang: string) => (
+                          <Badge key={lang} size="xs" color="violet" variant="light">{lang}</Badge>
+                        ))}
+                      </Group>
+                    ) : (
+                      <Text size="sm" c="dimmed">
+                        Latest releases curated across multiple languages and cultures
+                      </Text>
+                    )}
+                  </Stack>
                   <Button
                     variant="light"
                     color="violet"
