@@ -154,45 +154,69 @@ export async function registerRoutes(
         messages: [
           {
             role: "system",
-            content: `You are a world-class librarian and literary curator. Return a JSON array of exactly 8 recently released (2022–2025) book recommendations spanning different languages and cultures. Each object must have these exact fields:
-- title: string
-- author: string  
-- description: string (2–3 sentences max)
-- language: string (e.g. "English", "Spanish", "French", "Malayalam", "Japanese", "Arabic", "German", "Hindi")
-- year: string (publication year)
-- genre: string (e.g. "Fiction", "Non-Fiction", "Mystery", "Science", "Biography")
+            content: `You are a world-class librarian and literary curator. Return a JSON object with a "books" array containing exactly 50 recently released (2020–2025) book recommendations spanning many different languages and cultures. Cover a wide variety of genres and at least 15 different languages/regions. Each object in the array must have these exact fields:
+- title: string (use the original language title, not translated)
+- author: string
+- description: string (2–3 sentences max, in English)
+- language: string (e.g. "English", "Spanish", "French", "Malayalam", "Japanese", "Arabic", "German", "Hindi", "Korean", "Portuguese", "Italian", "Turkish", "Russian", "Chinese", "Bengali")
+- year: string (publication year between 2020 and 2025)
+- genre: string (e.g. "Fiction", "Non-Fiction", "Mystery", "Science", "Biography", "Romance", "Thriller", "Poetry")
 
-Return ONLY valid JSON array, no markdown, no explanation.`
+Return ONLY valid JSON with this structure: { "books": [...] }`
           },
           {
             role: "user",
-            content: "Give me 8 diverse recent book recommendations from different languages and cultures published between 2022 and 2025."
+            content: "Give me 50 diverse recent book recommendations from different languages and cultures published between 2020 and 2025."
           }
         ],
         response_format: { type: "json_object" },
       });
 
       const raw = response.choices[0].message.content || '{"books":[]}';
-      const parsed = JSON.parse(raw);
-      const books: any[] = parsed.books || parsed.recommendations || parsed || [];
+      let parsed: any;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = { books: [] };
+      }
 
-      // Fetch cover images from Google Books API in parallel
+      // Robustly find the books array regardless of key name
+      let bookList: any[] = [];
+      if (Array.isArray(parsed)) {
+        bookList = parsed;
+      } else if (Array.isArray(parsed.books)) {
+        bookList = parsed.books;
+      } else if (Array.isArray(parsed.recommendations)) {
+        bookList = parsed.recommendations;
+      } else {
+        const firstArray = Object.values(parsed).find(Array.isArray);
+        bookList = (firstArray as any[]) || [];
+      }
+
+      // Fetch cover images from Open Library in parallel (free, no API key)
       const withCovers = await Promise.all(
-        books.map(async (book: any) => {
+        bookList.map(async (book: any) => {
           try {
-            const query = encodeURIComponent(`intitle:${book.title} inauthor:${book.author}`);
-            const gbRes = await fetch(
-              `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=1&fields=items(volumeInfo(imageLinks))`
+            // Use the English title for searching if original is non-Latin
+            const searchTitle = encodeURIComponent(book.title.slice(0, 60));
+            const searchAuthor = encodeURIComponent(book.author.split(' ').slice(-1)[0]); // last name
+            const olRes = await fetch(
+              `https://openlibrary.org/search.json?title=${searchTitle}&author=${searchAuthor}&limit=1&fields=cover_i,isbn`,
+              { signal: AbortSignal.timeout(4000) }
             );
-            if (gbRes.ok) {
-              const gbData = await gbRes.json();
-              const imageLinks = gbData?.items?.[0]?.volumeInfo?.imageLinks;
-              const coverUrl = imageLinks?.thumbnail || imageLinks?.smallThumbnail || null;
-              // Google Books returns http URLs — upgrade to https
-              return { ...book, coverUrl: coverUrl ? coverUrl.replace('http://', 'https://') : null };
+            if (olRes.ok) {
+              const olData = await olRes.json();
+              const doc = olData?.docs?.[0];
+              if (doc?.cover_i) {
+                return { ...book, coverUrl: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` };
+              }
+              // Fallback: try ISBN cover if available
+              if (doc?.isbn?.[0]) {
+                return { ...book, coverUrl: `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-M.jpg` };
+              }
             }
           } catch {
-            // ignore individual cover fetch failures
+            // timeout or network error — skip cover
           }
           return { ...book, coverUrl: null };
         })

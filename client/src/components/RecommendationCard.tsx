@@ -1,6 +1,7 @@
-import { Card, Image, Text, Badge, Group, Stack, Box } from '@mantine/core';
-import { BookOpen } from 'lucide-react';
+import { Card, Image, Text, Badge, Group, Stack, Box, ActionIcon, Tooltip } from '@mantine/core';
+import { BookOpen, PlusCircle } from 'lucide-react';
 import type { Recommendation } from '@/hooks/use-books';
+import { useCreateBook } from '@/hooks/use-books';
 
 const languageColors: Record<string, string> = {
   English: 'blue',
@@ -15,6 +16,9 @@ const languageColors: Record<string, string> = {
   Chinese: 'pink',
   Korean: 'indigo',
   Italian: 'lime',
+  Turkish: 'orange',
+  Russian: 'red',
+  Bengali: 'teal',
 };
 
 interface RecommendationCardProps {
@@ -23,6 +27,19 @@ interface RecommendationCardProps {
 
 export function RecommendationCard({ book }: RecommendationCardProps) {
   const langColor = languageColors[book.language] || 'violet';
+  const createBook = useCreateBook();
+
+  const handleAddToWishlist = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    createBook.mutate({
+      title: book.title,
+      author: book.author,
+      status: 'wishlist',
+      notes: book.description,
+      coverUrl: book.coverUrl || '',
+      imageUrl: book.coverUrl || '',
+    });
+  };
 
   return (
     <Card
@@ -32,14 +49,14 @@ export function RecommendationCard({ book }: RecommendationCardProps) {
       withBorder
       className="h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
     >
-      <Card.Section>
+      <Card.Section style={{ position: 'relative' }}>
         {book.coverUrl ? (
           <Image
             src={book.coverUrl}
             height={220}
             alt={book.title}
             fit="cover"
-            fallbackSrc="https://placehold.co/400x600/7c3aed/white?text=No+Cover"
+            fallbackSrc={`https://placehold.co/300x220/7c3aed/white?text=${encodeURIComponent(book.title.slice(0, 20))}`}
           />
         ) : (
           <Box
@@ -47,9 +64,27 @@ export function RecommendationCard({ book }: RecommendationCardProps) {
             style={{ background: 'linear-gradient(135deg, #7c3aed22 0%, #4f46e522 100%)' }}
             className="flex items-center justify-center"
           >
-            <BookOpen size={52} className="text-violet-300" />
+            <Stack align="center" gap="xs">
+              <BookOpen size={48} className="text-violet-300" />
+              <Text size="xs" c="dimmed" ta="center" px="md" lineClamp={2}>{book.title}</Text>
+            </Stack>
           </Box>
         )}
+
+        {/* Add to Wishlist button — floating top-right */}
+        <Tooltip label="Add to Wishlist" position="left" withArrow>
+          <ActionIcon
+            variant="filled"
+            color="violet"
+            size="lg"
+            radius="xl"
+            style={{ position: 'absolute', top: 8, right: 8 }}
+            loading={createBook.isPending}
+            onClick={handleAddToWishlist}
+          >
+            <PlusCircle size={20} />
+          </ActionIcon>
+        </Tooltip>
       </Card.Section>
 
       <Stack mt="md" gap="xs" style={{ flex: 1 }}>
