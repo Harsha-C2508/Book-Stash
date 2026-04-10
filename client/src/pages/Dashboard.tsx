@@ -15,17 +15,20 @@ import {
   Menu,
   ActionIcon,
   Stack,
-  TextInput
+  TextInput,
+  Alert,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash, Search, LogOut } from 'lucide-react';
-import { useBooks } from '@/hooks/use-books';
+import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash, Search, LogOut, Sparkles, RefreshCw } from 'lucide-react';
+import { useBooks, useRecommendations } from '@/hooks/use-books';
 import { useAuth } from '@/hooks/use-auth';
 import { BookCard } from '@/components/BookCard';
 import { BookForm } from '@/components/BookForm';
 import { BookDetailsDrawer } from '@/components/BookDetailsDrawer';
+import { RecommendationCard } from '@/components/RecommendationCard';
 import { type Book } from '@shared/schema';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface NotificationMessage {
   id: string;
@@ -36,6 +39,7 @@ interface NotificationMessage {
 
 export default function Dashboard() {
   const { user, logoutMutation } = useAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string | null>('purchased');
   const [opened, { open, close }] = useDisclosure(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
@@ -72,12 +76,16 @@ export default function Dashboard() {
     setUnreadCount(0);
   };
 
-  // Fetch both lists (react-query handles caching so this is efficient)
   const { data: purchasedBooks, isLoading: loadingPurchased } = useBooks('purchased');
   const { data: wishlistBooks, isLoading: loadingWishlist } = useBooks('wishlist');
+  const { 
+    data: recommendations, 
+    isLoading: loadingRecs, 
+    error: recsError,
+    isFetching: fetchingRecs,
+  } = useRecommendations();
 
   useEffect(() => {
-    // Basic notification check
     const lastCheck = localStorage.getItem('last_wishlist_reminder');
     const now = new Date();
     const currentMonthYear = `${now.getMonth()}-${now.getFullYear()}`;
@@ -104,7 +112,6 @@ export default function Dashboard() {
   const filterBooks = (books?: Book[]) => {
     if (!books) return [];
     if (!searchQuery.trim()) return books;
-    
     const query = searchQuery.toLowerCase().trim();
     return books.filter(book => 
       book.title.toLowerCase().includes(query) ||
@@ -115,14 +122,16 @@ export default function Dashboard() {
 
   const filteredPurchased = filterBooks(purchasedBooks);
   const filteredWishlist = filterBooks(wishlistBooks);
-  
-  // Calculate stats
   const totalPurchased = purchasedBooks?.length || 0;
   const totalWishlist = wishlistBooks?.length || 0;
 
+  const handleRefreshRecommendations = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/recommendations'] });
+  };
+
   return (
     <div className="min-h-screen bg-[hsl(var(--background))] pb-20">
-      {/* Header Section */}
+      {/* Header */}
       <div className="bg-[hsl(var(--primary))] text-white pt-16 pb-24 px-4 shadow-lg mb-[-4rem]">
         <Container size="lg">
           <Group justify="space-between" align="center" mb="xl">
@@ -135,7 +144,7 @@ export default function Dashboard() {
                   My Library
                 </Title>
                 <Text c="white" size="sm" opacity={0.8}>
-                  Track your reading journey and future discoveries
+                  Welcome back, {user?.username} · Track your reading journey
                 </Text>
               </div>
             </Group>
@@ -150,37 +159,16 @@ export default function Dashboard() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.currentTarget.value)}
                     autoFocus
-                    onBlur={() => {
-                      if (!searchQuery) setSearchOpened(false);
-                    }}
+                    onBlur={() => { if (!searchQuery) setSearchOpened(false); }}
                     rightSection={
-                      <ActionIcon 
-                        variant="subtle" 
-                        color="gray" 
-                        size="sm" 
-                        onClick={() => {
-                          setSearchQuery('');
-                          setSearchOpened(false);
-                        }}
-                      >
+                      <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => { setSearchQuery(''); setSearchOpened(false); }}>
                         <Trash size={14} />
                       </ActionIcon>
                     }
-                    styles={{
-                      input: {
-                        width: '200px',
-                        transition: 'width 0.2s ease',
-                      }
-                    }}
+                    styles={{ input: { width: '200px' } }}
                   />
                 ) : (
-                  <ActionIcon 
-                    variant="white" 
-                    color="violet" 
-                    size="lg" 
-                    radius="md"
-                    onClick={() => setSearchOpened(true)}
-                  >
+                  <ActionIcon variant="white" color="violet" size="lg" radius="md" onClick={() => setSearchOpened(true)}>
                     <Search size={20} />
                   </ActionIcon>
                 )}
@@ -193,7 +181,6 @@ export default function Dashboard() {
                       </ActionIcon>
                     </Indicator>
                   </Menu.Target>
-
                   <Menu.Dropdown p="xs">
                     <Group justify="space-between" mb="xs" px="xs">
                       <Text fw={600} size="sm">Notifications</Text>
@@ -268,6 +255,9 @@ export default function Dashboard() {
               <Tabs.Tab value="wishlist" leftSection={<ShoppingBag size={16} />}>
                 Wishlist ({totalWishlist})
               </Tabs.Tab>
+              <Tabs.Tab value="discover" leftSection={<Sparkles size={16} />}>
+                Discover
+              </Tabs.Tab>
             </Tabs.List>
 
             <Tabs.Panel value="purchased">
@@ -287,7 +277,7 @@ export default function Dashboard() {
             </Tabs.Panel>
 
             <Tabs.Panel value="wishlist">
-               {isLoading ? (
+              {isLoading ? (
                 <Center py={50}><Loader color="violet" /></Center>
               ) : filteredWishlist.length === 0 ? (
                 <EmptyState type="wishlist" onAdd={open} isSearching={!!searchQuery} />
@@ -300,6 +290,52 @@ export default function Dashboard() {
                   ))}
                 </Grid>
               )}
+            </Tabs.Panel>
+
+            <Tabs.Panel value="discover">
+              <Stack gap="lg">
+                <Group justify="space-between" align="center">
+                  <div>
+                    <Title order={3} className="font-display text-gray-800">
+                      AI Book Recommendations
+                    </Title>
+                    <Text size="sm" c="dimmed">
+                      Latest releases curated across multiple languages and cultures
+                    </Text>
+                  </div>
+                  <Button
+                    variant="light"
+                    color="violet"
+                    size="sm"
+                    leftSection={<RefreshCw size={14} className={fetchingRecs ? 'animate-spin' : ''} />}
+                    onClick={handleRefreshRecommendations}
+                    loading={fetchingRecs}
+                  >
+                    Refresh
+                  </Button>
+                </Group>
+
+                {recsError ? (
+                  <Alert color="red" title="Could not load recommendations">
+                    Something went wrong fetching recommendations. Please try again.
+                  </Alert>
+                ) : loadingRecs ? (
+                  <Center py={80}>
+                    <Stack align="center" gap="md">
+                      <Loader color="violet" size="lg" />
+                      <Text c="dimmed" size="sm">AI is curating books for you…</Text>
+                    </Stack>
+                  </Center>
+                ) : (
+                  <Grid>
+                    {(recommendations || []).map((book, i) => (
+                      <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
+                        <RecommendationCard book={book} />
+                      </Grid.Col>
+                    ))}
+                  </Grid>
+                )}
+              </Stack>
             </Tabs.Panel>
           </Tabs>
         </Stack>
@@ -328,12 +364,8 @@ function EmptyState({ type, onAdd, isSearching }: { type: 'purchased' | 'wishlis
   if (isSearching) {
     return (
       <Center py={60} className="flex-col text-center">
-        <Title order={3} mb="sm" className="font-display text-gray-700">
-          No matches found
-        </Title>
-        <Text c="dimmed" maw={400}>
-          Try searching with different keywords or check your spelling.
-        </Text>
+        <Title order={3} mb="sm" className="font-display text-gray-700">No matches found</Title>
+        <Text c="dimmed" maw={400}>Try searching with different keywords or check your spelling.</Text>
       </Center>
     );
   }

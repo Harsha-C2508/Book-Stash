@@ -81,6 +81,28 @@ export function useUpdateBook() {
   });
 }
 
+export interface Recommendation {
+  title: string;
+  author: string;
+  description: string;
+  language: string;
+  year: string;
+  genre: string;
+  coverUrl: string | null;
+}
+
+export function useRecommendations() {
+  return useQuery<Recommendation[]>({
+    queryKey: ['/api/recommendations'],
+    queryFn: async () => {
+      const res = await fetch('/api/recommendations', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch recommendations');
+      return res.json();
+    },
+    staleTime: 10 * 60 * 1000, // cache for 10 minutes so AI isn't called on every click
+  });
+}
+
 export function useDeleteBook() {
   const queryClient = useQueryClient();
   return useMutation({

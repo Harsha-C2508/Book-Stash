@@ -142,5 +142,68 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  app.get("/api/recommendations", requireAuth, async (req, res) => {
+    try {
+      const openaiInstance = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const response = await openaiInstance.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are a world-class librarian and literary curator. Return a JSON array of exactly 8 recently released (2022–2025) book recommendations spanning different languages and cultures. Each object must have these exact fields:
+- title: string
+- author: string  
+- description: string (2–3 sentences max)
+- language: string (e.g. "English", "Spanish", "French", "Malayalam", "Japanese", "Arabic", "German", "Hindi")
+- year: string (publication year)
+- genre: string (e.g. "Fiction", "Non-Fiction", "Mystery", "Science", "Biography")
+
+Return ONLY valid JSON array, no markdown, no explanation.`
+          },
+          {
+            role: "user",
+            content: "Give me 8 diverse recent book recommendations from different languages and cultures published between 2022 and 2025."
+          }
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const raw = response.choices[0].message.content || '{"books":[]}';
+      const parsed = JSON.parse(raw);
+      const books: any[] = parsed.books || parsed.recommendations || parsed || [];
+
+      // Fetch cover images from Google Books API in parallel
+      const withCovers = await Promise.all(
+        books.map(async (book: any) => {
+          try {
+            const query = encodeURIComponent(`intitle:${book.title} inauthor:${book.author}`);
+            const gbRes = await fetch(
+              `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=1&fields=items(volumeInfo(imageLinks))`
+            );
+            if (gbRes.ok) {
+              const gbData = await gbRes.json();
+              const imageLinks = gbData?.items?.[0]?.volumeInfo?.imageLinks;
+              const coverUrl = imageLinks?.thumbnail || imageLinks?.smallThumbnail || null;
+              // Google Books returns http URLs — upgrade to https
+              return { ...book, coverUrl: coverUrl ? coverUrl.replace('http://', 'https://') : null };
+            }
+          } catch {
+            // ignore individual cover fetch failures
+          }
+          return { ...book, coverUrl: null };
+        })
+      );
+
+      res.json(withCovers);
+    } catch (error) {
+      console.error("Recommendations error:", error);
+      res.status(500).json({ error: "Failed to fetch recommendations" });
+    }
+  });
+
   return httpServer;
 }
