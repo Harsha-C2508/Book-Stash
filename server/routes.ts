@@ -23,6 +23,22 @@ export async function registerRoutes(
   registerChatRoutes(app);
   registerImageRoutes(app);
 
+  app.put("/api/user/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { preferredLanguages, preferredGenres, favoriteAuthors } = req.body;
+      const updated = await storage.updateUserPreferences(userId, {
+        preferredLanguages: preferredLanguages || [],
+        preferredGenres: preferredGenres || [],
+        favoriteAuthors: favoriteAuthors || [],
+      });
+      res.json(updated);
+    } catch (err) {
+      console.error("Preferences error:", err);
+      res.status(500).json({ error: "Failed to save preferences" });
+    }
+  });
+
   app.post("/api/books/summary", requireAuth, async (req, res) => {
     try {
       const { title, author } = req.body;

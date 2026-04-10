@@ -24,6 +24,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserPreferences(id: number, prefs: { preferredLanguages: string[]; preferredGenres: string[]; favoriteAuthors: string[] }): Promise<User>;
 
   sessionStore: session.Store;
 }
@@ -85,6 +86,11 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
+  }
+
+  async updateUserPreferences(id: number, prefs: { preferredLanguages: string[]; preferredGenres: string[]; favoriteAuthors: string[] }): Promise<User> {
+    const [updated] = await db.update(users).set(prefs).where(eq(users.id, id)).returning();
+    return updated;
   }
 }
 
