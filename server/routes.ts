@@ -155,14 +155,15 @@ export async function registerRoutes(
           {
             role: "system",
             content: `You are a world-class librarian and literary curator. Return a JSON object with a "books" array containing exactly 50 recently released (2020–2025) book recommendations spanning many different languages and cultures. Cover a wide variety of genres and at least 15 different languages/regions. Each object in the array must have these exact fields:
-- title: string (use the original language title, not translated)
+- title: string (use the original language title)
+- searchTitle: string (the English translated title or romanized version — used for cover image search)
 - author: string
 - description: string (2–3 sentences max, in English)
 - language: string (e.g. "English", "Spanish", "French", "Malayalam", "Japanese", "Arabic", "German", "Hindi", "Korean", "Portuguese", "Italian", "Turkish", "Russian", "Chinese", "Bengali")
 - year: string (publication year between 2020 and 2025)
 - genre: string (e.g. "Fiction", "Non-Fiction", "Mystery", "Science", "Biography", "Romance", "Thriller", "Poetry")
 
-Return ONLY valid JSON with this structure: { "books": [...] }`
+Prefer well-known books that are likely to be indexed in Google Books. Return ONLY valid JSON with this structure: { "books": [...] }`
           },
           {
             role: "user",
@@ -193,31 +194,52 @@ Return ONLY valid JSON with this structure: { "books": [...] }`
         bookList = (firstArray as any[]) || [];
       }
 
-      // Fetch cover images from Open Library in parallel (free, no API key)
+      // Fetch cover images: try Google Books first, fall back to Open Library
       const withCovers = await Promise.all(
         bookList.map(async (book: any) => {
+          // Prefer the English/romanized searchTitle for better API matching
+          const lookupTitle = (book.searchTitle || book.title).slice(0, 80);
+          const lookupAuthor = book.author.split(' ').slice(-1)[0]; // last name only
+
+          // ── Step 1: Google Books API ──────────────────────────────────────
           try {
-            // Use the English title for searching if original is non-Latin
-            const searchTitle = encodeURIComponent(book.title.slice(0, 60));
-            const searchAuthor = encodeURIComponent(book.author.split(' ').slice(-1)[0]); // last name
+            const q = encodeURIComponent(`intitle:${lookupTitle} inauthor:${lookupAuthor}`);
+            const gbRes = await fetch(
+              `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&printType=books`,
+              { signal: AbortSignal.timeout(5000) }
+            );
+            if (gbRes.ok) {
+              const gbData = await gbRes.json();
+              const imageLinks = gbData?.items?.[0]?.volumeInfo?.imageLinks;
+              const raw = imageLinks?.thumbnail || imageLinks?.smallThumbnail;
+              if (raw) {
+                // Google Books serves http — upgrade to https and increase zoom
+                const coverUrl = raw.replace('http://', 'https://').replace('zoom=1', 'zoom=2');
+                return { ...book, coverUrl };
+              }
+            }
+          } catch { /* timeout — try next source */ }
+
+          // ── Step 2: Open Library ──────────────────────────────────────────
+          try {
+            const t = encodeURIComponent(lookupTitle);
+            const a = encodeURIComponent(lookupAuthor);
             const olRes = await fetch(
-              `https://openlibrary.org/search.json?title=${searchTitle}&author=${searchAuthor}&limit=1&fields=cover_i,isbn`,
-              { signal: AbortSignal.timeout(4000) }
+              `https://openlibrary.org/search.json?title=${t}&author=${a}&limit=1&fields=cover_i,isbn`,
+              { signal: AbortSignal.timeout(5000) }
             );
             if (olRes.ok) {
               const olData = await olRes.json();
               const doc = olData?.docs?.[0];
               if (doc?.cover_i) {
-                return { ...book, coverUrl: `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` };
+                return { ...book, coverUrl: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` };
               }
-              // Fallback: try ISBN cover if available
               if (doc?.isbn?.[0]) {
-                return { ...book, coverUrl: `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-M.jpg` };
+                return { ...book, coverUrl: `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg` };
               }
             }
-          } catch {
-            // timeout or network error — skip cover
-          }
+          } catch { /* skip */ }
+
           return { ...book, coverUrl: null };
         })
       );

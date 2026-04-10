@@ -83,6 +83,7 @@ export function useUpdateBook() {
 
 export interface Recommendation {
   title: string;
+  searchTitle?: string;
   author: string;
   description: string;
   language: string;
