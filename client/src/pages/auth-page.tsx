@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   TextInput,
@@ -32,6 +32,8 @@ import {
   UserPlus,
   CheckCircle2,
   User,
+  Search,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
@@ -378,6 +380,7 @@ export default function AuthPage() {
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
+  const [authorSearch, setAuthorSearch] = useState("");
   const [savingPrefs, setSavingPrefs] = useState(false);
 
   useEffect(() => {
@@ -393,10 +396,44 @@ export default function AuthPage() {
     },
   });
 
-  // Available authors based on selected languages
-  const availableAuthors = selectedLanguages.flatMap(
-    (lang) => AUTHORS_BY_LANGUAGE[lang] || []
-  );
+  // Filter authors by language, then genre, then search query
+  const filteredAuthors = useMemo(() => {
+    // Step 1: pool from selected languages (or all if none selected)
+    let pool = selectedLanguages.length > 0
+      ? selectedLanguages.flatMap((lang) => AUTHORS_BY_LANGUAGE[lang] || [])
+      : Object.values(AUTHORS_BY_LANGUAGE).flat();
+
+    // Deduplicate by name
+    const seen = new Set<string>();
+    pool = pool.filter((a) => {
+      if (seen.has(a.name)) return false;
+      seen.add(a.name);
+      return true;
+    });
+
+    // Step 2: filter by selected genres (match against knownFor)
+    if (selectedGenres.length > 0) {
+      const genreFiltered = pool.filter((a) =>
+        selectedGenres.some((g) =>
+          a.knownFor.toLowerCase().includes(g.toLowerCase())
+        )
+      );
+      // Only apply genre filter if it returns results (avoid empty screen)
+      if (genreFiltered.length > 0) pool = genreFiltered;
+    }
+
+    // Step 3: apply search query
+    if (authorSearch.trim()) {
+      const q = authorSearch.toLowerCase();
+      pool = pool.filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          a.knownFor.toLowerCase().includes(q)
+      );
+    }
+
+    return pool;
+  }, [selectedLanguages, selectedGenres, authorSearch]);
 
   const toggleAuthor = (name: string) => {
     setSelectedAuthors((prev) =>
@@ -513,61 +550,126 @@ export default function AuthPage() {
 
             {/* Step 1 — Favourite Authors */}
             {onboardStep === 1 && (
-              <Stack gap="lg">
+              <Stack gap="md">
                 <Stack gap={4}>
                   <Group gap="xs">
                     <Heart size={20} className="text-violet-600" />
                     <Title order={3} className="font-display">Pick your favourite authors</Title>
                   </Group>
                   <Text c="dimmed" size="sm">
-                    {availableAuthors.length > 0
-                      ? "Tap any author you love — select as many as you like"
-                      : "No languages selected — showing popular authors from all languages"}
+                    Showing authors who match your selected languages and genres — tap to select
                   </Text>
                 </Stack>
 
-                <ScrollArea h={380} type="auto">
-                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                    {(availableAuthors.length > 0
-                      ? availableAuthors
-                      : Object.values(AUTHORS_BY_LANGUAGE).flat()
-                    ).map(({ name, knownFor }) => {
-                      const selected = selectedAuthors.includes(name);
-                      return (
-                        <Paper
-                          key={name}
-                          p="sm"
-                          radius="md"
-                          withBorder
-                          style={{
-                            cursor: "pointer",
-                            borderColor: selected ? "var(--mantine-color-violet-5)" : undefined,
-                            background: selected ? "var(--mantine-color-violet-0)" : undefined,
-                            transition: "all 0.15s",
-                          }}
-                          onClick={() => toggleAuthor(name)}
-                          data-testid={`card-author-${name.replace(/\s+/g, "-")}`}
-                        >
-                          <Group justify="space-between" wrap="nowrap">
-                            <Stack gap={2}>
-                              <Text fw={600} size="sm">{name}</Text>
-                              <Text size="xs" c="dimmed">{knownFor}</Text>
-                            </Stack>
-                            {selected && (
-                              <CheckCircle2 size={20} className="text-violet-600 shrink-0" />
-                            )}
-                          </Group>
-                        </Paper>
-                      );
-                    })}
-                  </SimpleGrid>
+                {/* Active filters summary */}
+                {(selectedLanguages.length > 0 || selectedGenres.length > 0) && (
+                  <Group gap="xs" wrap="wrap">
+                    {selectedLanguages.map((l) => (
+                      <Badge key={l} size="xs" color="violet" variant="filled">{l}</Badge>
+                    ))}
+                    {selectedGenres.map((g) => (
+                      <Badge key={g} size="xs" color="indigo" variant="light">{g}</Badge>
+                    ))}
+                  </Group>
+                )}
+
+                {/* Search bar */}
+                <TextInput
+                  placeholder="Search by name or genre…"
+                  leftSection={<Search size={15} />}
+                  rightSection={
+                    authorSearch ? (
+                      <X
+                        size={15}
+                        style={{ cursor: "pointer", opacity: 0.5 }}
+                        onClick={() => setAuthorSearch("")}
+                      />
+                    ) : null
+                  }
+                  value={authorSearch}
+                  onChange={(e) => setAuthorSearch(e.currentTarget.value)}
+                  data-testid="input-author-search"
+                />
+
+                {/* Count */}
+                <Group justify="space-between">
+                  <Text size="xs" c="dimmed">
+                    {filteredAuthors.length} author{filteredAuthors.length !== 1 ? "s" : ""} found
+                  </Text>
+                  {selectedAuthors.length > 0 && (
+                    <Button
+                      variant="subtle"
+                      color="violet"
+                      size="xs"
+                      onClick={() => setSelectedAuthors([])}
+                    >
+                      Clear selection ({selectedAuthors.length})
+                    </Button>
+                  )}
+                </Group>
+
+                {/* Author grid — no fixed height, scrollable */}
+                <ScrollArea h={400} type="auto" offsetScrollbars>
+                  {filteredAuthors.length === 0 ? (
+                    <Center py="xl">
+                      <Stack align="center" gap="xs">
+                        <Text c="dimmed" size="sm">No authors match your search</Text>
+                        <Button variant="subtle" size="xs" onClick={() => setAuthorSearch("")}>
+                          Clear search
+                        </Button>
+                      </Stack>
+                    </Center>
+                  ) : (
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" pr="xs">
+                      {filteredAuthors.map(({ name, knownFor }) => {
+                        const selected = selectedAuthors.includes(name);
+                        return (
+                          <Paper
+                            key={name}
+                            p="sm"
+                            radius="md"
+                            withBorder
+                            style={{
+                              cursor: "pointer",
+                              borderColor: selected ? "var(--mantine-color-violet-5)" : undefined,
+                              background: selected ? "var(--mantine-color-violet-0)" : undefined,
+                              transition: "all 0.15s",
+                            }}
+                            onClick={() => toggleAuthor(name)}
+                            data-testid={`card-author-${name.replace(/\s+/g, "-")}`}
+                          >
+                            <Group justify="space-between" wrap="nowrap">
+                              <Stack gap={2}>
+                                <Text fw={600} size="sm">{name}</Text>
+                                <Text size="xs" c="dimmed">{knownFor}</Text>
+                              </Stack>
+                              {selected && (
+                                <CheckCircle2 size={20} className="text-violet-600 shrink-0" />
+                              )}
+                            </Group>
+                          </Paper>
+                        );
+                      })}
+                    </SimpleGrid>
+                  )}
                 </ScrollArea>
 
+                {/* Selected authors summary */}
                 {selectedAuthors.length > 0 && (
                   <Group gap="xs" wrap="wrap">
-                    <Text size="xs" c="dimmed">Selected:</Text>
+                    <Text size="xs" c="dimmed" fw={600}>Your picks:</Text>
                     {selectedAuthors.map((a) => (
-                      <Badge key={a} color="violet" variant="light" size="sm">{a}</Badge>
+                      <Badge
+                        key={a}
+                        color="violet"
+                        variant="light"
+                        size="sm"
+                        rightSection={
+                          <X size={10} style={{ cursor: "pointer" }} onClick={() => toggleAuthor(a)} />
+                        }
+                      >
+                        {a}
+                      </Badge>
                     ))}
                   </Group>
                 )}
