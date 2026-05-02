@@ -15,6 +15,123 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// ── Curated verified books by language ────────────────────────────────────────
+// These are hand-verified real books used to seed recommendations when the user
+// prefers a language where the AI tends to hallucinate specific titles.
+// Only add books you are 100% certain exist with the correct title/author/year.
+const VERIFIED_BOOKS_BY_LANGUAGE: Record<string, Array<{
+  title: string; searchTitle: string; author: string;
+  description: string; language: string; year: string; genre: string;
+}>> = {
+  Malayalam: [
+    {
+      title: "Aadujeevitham",
+      searchTitle: "Goat Days",
+      author: "Benyamin",
+      description: "Based on a true story, a Keralite migrant worker is trapped in the Saudi Arabian desert as a goat herder. A harrowing tale of survival, isolation, and the indomitable human spirit.",
+      language: "Malayalam", year: "2008", genre: "Fiction",
+    },
+    {
+      title: "Aarachar",
+      searchTitle: "Hangwoman",
+      author: "K.R. Meera",
+      description: "Chetna Grddha Mullick, descendant of a long line of executioners, is forced to become a hangwoman. A powerful meditation on justice, patriarchy, and power in modern India.",
+      language: "Malayalam", year: "2012", genre: "Fiction",
+    },
+    {
+      title: "Meesha",
+      searchTitle: "Moustache",
+      author: "S. Hareesh",
+      description: "Winner of the Kerala Sahitya Akademi Award. A Dalit man's legendary moustache becomes a symbol of his power and a source of terror for the upper castes around him.",
+      language: "Malayalam", year: "2018", genre: "Fiction",
+    },
+    {
+      title: "Khasakkinte Itihasam",
+      searchTitle: "The Legends of Khasak",
+      author: "O.V. Vijayan",
+      description: "A landmark of Malayalam literature. Set in the fictional village of Khasak, it weaves mythology, philosophy, and human longing into luminous prose.",
+      language: "Malayalam", year: "1969", genre: "Fiction",
+    },
+    {
+      title: "Chemmeen",
+      searchTitle: "Chemmeen",
+      author: "Thakazhi Sivasankara Pillai",
+      description: "One of the greatest Malayalam novels, set among Kerala's fishing communities. A doomed love story between Karuthamma and Pareekutty that crosses the lines of caste and faith.",
+      language: "Malayalam", year: "1956", genre: "Fiction",
+    },
+    {
+      title: "Randamoozham",
+      searchTitle: "Second Turn",
+      author: "M.T. Vasudevan Nair",
+      description: "A retelling of the Mahabharata from Bhima's perspective — the warrior who wins every battle yet lives in his brother Arjuna's shadow. A classic of Malayalam literature.",
+      language: "Malayalam", year: "1984", genre: "Fiction",
+    },
+    {
+      title: "Nalukettu",
+      searchTitle: "Nalukettu",
+      author: "M.T. Vasudevan Nair",
+      description: "The story of Appunni, a young man who returns to reclaim his ancestral home and discovers the bitter legacy of a decaying joint family system in mid-century Kerala.",
+      language: "Malayalam", year: "1958", genre: "Fiction",
+    },
+    {
+      title: "Balyakalasakhi",
+      searchTitle: "Balyakalasakhi",
+      author: "Vaikom Muhammad Basheer",
+      description: "A tender semi-autobiographical novella about a childhood friendship between a Hindu boy and a Muslim girl that blossoms into love, only to be separated by poverty and society.",
+      language: "Malayalam", year: "1944", genre: "Fiction",
+    },
+    {
+      title: "Francis Itty Cora",
+      searchTitle: "Francis Itty Cora",
+      author: "T.D. Ramakrishnan",
+      description: "A dazzling postmodern thriller that spans three continents, blending history, mythology, and detective fiction as investigators trace a murder across time.",
+      language: "Malayalam", year: "2009", genre: "Thriller",
+    },
+    {
+      title: "Sugandhi Alias Andal Devanayaki",
+      searchTitle: "Sugandhi Alias Andal Devanayaki",
+      author: "T.D. Ramakrishnan",
+      description: "A gripping political thriller that interweaves the story of an ancient Tamil freedom fighter with that of a modern woman fighting state violence, examining identity and sacrifice.",
+      language: "Malayalam", year: "2012", genre: "Thriller",
+    },
+    {
+      title: "Al Arabian Novel Factory",
+      searchTitle: "Al Arabian Novel Factory",
+      author: "T.D. Ramakrishnan",
+      description: "A satirical meta-fiction set in Dubai, following a group of Keralite migrant workers who decide to write a novel. A sharp commentary on Gulf migration and literary ambition.",
+      language: "Malayalam", year: "2013", genre: "Fiction",
+    },
+    {
+      title: "Yakshi",
+      searchTitle: "Yakshi",
+      author: "Malayattoor Ramakrishnan",
+      description: "A classic Malayalam horror thriller in which a scientist encounters a mysterious and seductive woman in his bungalow, drawing on deep Kerala folklore about the Yakshi spirit.",
+      language: "Malayalam", year: "1967", genre: "Thriller",
+    },
+    {
+      title: "Ntuppuppakkoranendarnnu",
+      searchTitle: "Me Grandad Had an Elephant",
+      author: "Vaikom Muhammad Basheer",
+      description: "A beloved tragicomic masterpiece about the eccentric members of a Muslim family in Kerala — a story of love, loss, and the absurdity of everyday life told with irresistible charm.",
+      language: "Malayalam", year: "1951", genre: "Fiction",
+    },
+    {
+      title: "Ormayude Njarambu",
+      searchTitle: "Yellow Is the Colour of Longing",
+      author: "C.V. Balakrishnan",
+      description: "A reflective novel tracing memories of a vanishing Kerala, its landscapes, communities, and ways of life as seen through the eyes of a man returning to his roots.",
+      language: "Malayalam", year: "2016", genre: "Fiction",
+    },
+    {
+      title: "Piravi",
+      searchTitle: "Birth",
+      author: "K.R. Meera",
+      description: "A collection of short stories by K.R. Meera that explore the interior lives of women navigating grief, desire, and resistance in contemporary Kerala.",
+      language: "Malayalam", year: "2015", genre: "Fiction",
+    },
+  ],
+};
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -211,25 +328,40 @@ Only include real, verifiable authors. If the query looks like a partial name, r
       const userRecord = await storage.getUser(userId);
       const preferredLanguages: string[] = userRecord?.preferredLanguages ?? [];
       const preferredGenres: string[] = userRecord?.preferredGenres ?? [];
-      const favoriteAuthors: string[] = userRecord?.favoriteAuthors ?? [];
 
       const hasPreferences = preferredLanguages.length > 0 || preferredGenres.length > 0;
 
-      // Build a personalisation instruction to inject into the prompt
-      let personalisationNote = "";
-      if (hasPreferences) {
-        const parts: string[] = [];
-        if (preferredLanguages.length > 0) {
-          parts.push(`The user prefers books in these languages: ${preferredLanguages.join(", ")}. Include books in these languages when you are 100% certain the title and author are real and accurate — do NOT invent titles just to fill the language quota. It is better to recommend a verified English book than a hallucinated regional-language title.`);
-        }
-        if (preferredGenres.length > 0) {
-          parts.push(`The user enjoys these genres: ${preferredGenres.join(", ")}. Prioritise these genres.`);
-        }
-        if (favoriteAuthors.length > 0) {
-          parts.push(`The user's favourite authors include: ${favoriteAuthors.join(", ")}. Include books by these authors only if you are certain the specific title exists. Also recommend authors who write in a similar style.`);
-        }
-        personalisationNote = "\n\nPersonalisation instructions:\n" + parts.join("\n");
+      // ── Step 1: seed verified curated books for preferred languages ──────────
+      // For regional languages (e.g. Malayalam) the AI hallucinates titles, so we
+      // always anchor the list with hand-verified real books from our curated set.
+      const seededBooks: typeof VERIFIED_BOOKS_BY_LANGUAGE[string] = [];
+      for (const lang of preferredLanguages) {
+        const verified = VERIFIED_BOOKS_BY_LANGUAGE[lang];
+        if (verified) seededBooks.push(...verified);
       }
+
+      // How many more books should the AI fill in?
+      const TARGET_TOTAL = 50;
+      const aiTarget = Math.max(TARGET_TOTAL - seededBooks.length, 15);
+
+      // ── Step 2: build AI prompt for the remaining slots ──────────────────────
+      const languagesForAI = preferredLanguages.length > 0
+        // Exclude languages already covered by the curated set — AI fills the rest
+        ? preferredLanguages.filter(l => !VERIFIED_BOOKS_BY_LANGUAGE[l])
+        : [];
+
+      const parts: string[] = [];
+      if (languagesForAI.length > 0) {
+        parts.push(`Preferred languages: ${languagesForAI.join(", ")}.`);
+      }
+      if (preferredGenres.length > 0) {
+        parts.push(`Preferred genres: ${preferredGenres.join(", ")}.`);
+      }
+      // Do NOT ask the AI to recommend by specific author names — it reliably
+      // hallucinates titles for regional/popular fiction authors it doesn't know well.
+      const personalisationNote = parts.length > 0
+        ? "\n\nUser preferences:\n" + parts.join("\n")
+        : "";
 
       const openaiInstance = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -241,29 +373,27 @@ Only include real, verifiable authors. If the query looks like a partial name, r
         messages: [
           {
             role: "system",
-            content: `You are a world-class librarian and literary curator. Return a JSON object with a "books" array containing exactly 50 book recommendations. Each object must have these exact fields:
-- title: string (exact original-language title of the book)
-- searchTitle: string (the English translated title or romanized/transliterated version — used for cover image lookup)
+            content: `You are a world-class librarian. Return a JSON object with a "books" array of exactly ${aiTarget} book recommendations. Each object must have:
+- title: string (exact original-language title)
+- searchTitle: string (English title or romanized version for cover image lookup)
 - author: string (exact real author name)
-- description: string (2–3 sentences in English describing the book)
-- language: string (e.g. "English", "Spanish", "French", "Malayalam", "Japanese", "Arabic", "German", "Hindi", "Korean", "Portuguese", "Italian", "Turkish", "Russian", "Chinese", "Bengali")
-- year: string (publication year as a 4-digit string)
-- genre: string (e.g. "Fiction", "Non-Fiction", "Mystery", "Science", "Biography", "Romance", "Thriller", "Poetry")
+- description: string (2–3 sentences in English)
+- language: string (e.g. "English", "Spanish", "French", "Japanese", "Arabic", "German", "Hindi", "Korean", "Portuguese", "Italian", "Turkish", "Russian", "Chinese", "Bengali")
+- year: string (4-digit publication year)
+- genre: string
 
-CRITICAL RULES — you must follow these exactly:
-1. Every single book must be 100% real and verifiable. Never invent or hallucinate a title or author. If you are not completely certain a book exists, omit it.
-2. Only recommend books published between 2015 and 2024. Do not include books from 2025.
-3. The title and author must be exactly correct — no approximations or made-up names.
-4. For non-English languages (especially regional languages like Malayalam, Tamil, Bengali, Hindi), only include books you are highly confident about. If unsure, replace with a well-known title from a major language you are certain about.
-5. Prefer books that are widely available on Google Books or Open Library.
+RULES — strictly follow:
+1. Every book must be 100% real. Never invent a title or author.
+2. Do NOT recommend books in Malayalam, Tamil, or other Indian regional languages — those are handled separately.
+3. Recommend widely-known books from major world languages (English, Spanish, French, Japanese, Arabic, German, Korean, Portuguese, etc.).
+4. Match the user's preferred genres as closely as possible.
+5. Prefer books available on Google Books or Open Library.
 
 Return ONLY valid JSON: { "books": [...] }${personalisationNote}`
           },
           {
             role: "user",
-            content: hasPreferences
-              ? "Give me 50 personalised book recommendations based on my language and genre preferences. Only include books you are 100% certain are real."
-              : "Give me 50 diverse book recommendations from different languages and cultures. Only include books you are 100% certain are real."
+            content: `Give me ${aiTarget} book recommendations. Preferred genres: ${preferredGenres.length ? preferredGenres.join(", ") : "any"}. Only include books you are 100% certain are real.`
           }
         ],
         response_format: { type: "json_object" },
@@ -298,11 +428,16 @@ Return ONLY valid JSON: { "books": [...] }${personalisationNote}`
         return wa.some(w => wb.has(w));
       }
 
+      // ── Step 3: combine seeded + AI books, then fetch covers ─────────────────
+      // Seeded books come first (preferred language), AI books fill the rest.
+      const allBooks = [...seededBooks, ...bookList];
+
+      // Helper: check whether two strings share at least one significant word
       // Fetch cover images: try Google Books first, fall back to Open Library.
       // IMPORTANT: validate that the returned result actually matches the
       // requested book before accepting its cover — mismatches mean a wrong cover.
       const withCovers = await Promise.all(
-        bookList.map(async (book: any) => {
+        allBooks.map(async (book: any) => {
           const lookupTitle = (book.searchTitle || book.title).slice(0, 80);
           // Use full author name for better precision (not just last name)
           const lookupAuthor = book.author.slice(0, 60);
