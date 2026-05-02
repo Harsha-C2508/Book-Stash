@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Container, 
   Title, 
@@ -18,6 +18,8 @@ import {
   TextInput,
   Alert,
   Badge,
+  Select,
+  CloseButton,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -48,6 +50,9 @@ export default function Dashboard() {
   const [history, setHistory] = useState<NotificationMessage[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpened, setSearchOpened] = useState(false);
+  const [discoverSearch, setDiscoverSearch] = useState('');
+  const [discoverGenre, setDiscoverGenre] = useState<string | null>(null);
+  const [discoverLang, setDiscoverLang] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('notifications_history');
@@ -128,6 +133,42 @@ export default function Dashboard() {
 
   const handleRefreshRecommendations = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/recommendations'] });
+  };
+
+  // Derive unique genre + language options from loaded recommendations
+  const discoverGenreOptions = useMemo(() => {
+    const genres = [...new Set((recommendations || []).map(b => b.genre).filter(Boolean))].sort();
+    return genres.map(g => ({ value: g, label: g }));
+  }, [recommendations]);
+
+  const discoverLangOptions = useMemo(() => {
+    const langs = [...new Set((recommendations || []).map(b => b.language).filter(Boolean))].sort();
+    return langs.map(l => ({ value: l, label: l }));
+  }, [recommendations]);
+
+  // Client-side filter: title, author, description searched; genre + language exact match
+  const filteredRecommendations = useMemo(() => {
+    let list = recommendations || [];
+    const q = discoverSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(b =>
+        b.title.toLowerCase().includes(q) ||
+        b.author.toLowerCase().includes(q) ||
+        b.description.toLowerCase().includes(q) ||
+        b.genre.toLowerCase().includes(q) ||
+        b.language.toLowerCase().includes(q)
+      );
+    }
+    if (discoverGenre) list = list.filter(b => b.genre === discoverGenre);
+    if (discoverLang)  list = list.filter(b => b.language === discoverLang);
+    return list;
+  }, [recommendations, discoverSearch, discoverGenre, discoverLang]);
+
+  const hasDiscoverFilters = !!discoverSearch || !!discoverGenre || !!discoverLang;
+  const clearDiscoverFilters = () => {
+    setDiscoverSearch('');
+    setDiscoverGenre(null);
+    setDiscoverLang(null);
   };
 
   return (
@@ -295,6 +336,7 @@ export default function Dashboard() {
 
             <Tabs.Panel value="discover">
               <Stack gap="lg">
+                {/* Header row */}
                 <Group justify="space-between" align="flex-start">
                   <Stack gap={6}>
                     <Group gap="sm" align="center">
@@ -316,7 +358,7 @@ export default function Dashboard() {
                       </Group>
                     ) : (
                       <Text size="sm" c="dimmed">
-                        Latest releases curated across multiple languages and cultures
+                        Curated across multiple languages and cultures
                       </Text>
                     )}
                   </Stack>
@@ -332,6 +374,57 @@ export default function Dashboard() {
                   </Button>
                 </Group>
 
+                {/* Search + filter row — only show once data is loaded */}
+                {!loadingRecs && !recsError && (recommendations || []).length > 0 && (
+                  <Group gap="sm" align="flex-end" wrap="wrap">
+                    <TextInput
+                      placeholder="Search title, author, genre…"
+                      leftSection={<Search size={15} />}
+                      rightSection={
+                        discoverSearch ? (
+                          <CloseButton size="sm" onClick={() => setDiscoverSearch('')} />
+                        ) : null
+                      }
+                      value={discoverSearch}
+                      onChange={(e) => setDiscoverSearch(e.currentTarget.value)}
+                      style={{ flex: 1, minWidth: 180 }}
+                      data-testid="input-discover-search"
+                    />
+                    <Select
+                      placeholder="Genre"
+                      data={discoverGenreOptions}
+                      value={discoverGenre}
+                      onChange={setDiscoverGenre}
+                      clearable
+                      style={{ width: 140 }}
+                      data-testid="select-discover-genre"
+                    />
+                    <Select
+                      placeholder="Language"
+                      data={discoverLangOptions}
+                      value={discoverLang}
+                      onChange={setDiscoverLang}
+                      clearable
+                      style={{ width: 140 }}
+                      data-testid="select-discover-language"
+                    />
+                    {hasDiscoverFilters && (
+                      <Button
+                        variant="subtle"
+                        color="gray"
+                        size="sm"
+                        onClick={clearDiscoverFilters}
+                        data-testid="button-discover-clear-filters"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                      {filteredRecommendations.length} of {(recommendations || []).length} books
+                    </Text>
+                  </Group>
+                )}
+
                 {recsError ? (
                   <Alert color="red" title="Could not load recommendations">
                     Something went wrong fetching recommendations. Please try again.
@@ -343,9 +436,18 @@ export default function Dashboard() {
                       <Text c="dimmed" size="sm">AI is curating books for you…</Text>
                     </Stack>
                   </Center>
+                ) : filteredRecommendations.length === 0 && hasDiscoverFilters ? (
+                  <Center py={60}>
+                    <Stack align="center" gap="xs">
+                      <Text c="dimmed" size="sm">No books match your search.</Text>
+                      <Button variant="subtle" size="xs" color="violet" onClick={clearDiscoverFilters}>
+                        Clear filters
+                      </Button>
+                    </Stack>
+                  </Center>
                 ) : (
                   <Grid>
-                    {(recommendations || []).map((book, i) => (
+                    {filteredRecommendations.map((book, i) => (
                       <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4, lg: 3 }}>
                         <RecommendationCard book={book} />
                       </Grid.Col>
