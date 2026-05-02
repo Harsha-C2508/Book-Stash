@@ -23,6 +23,52 @@ export async function registerRoutes(
   registerChatRoutes(app);
   registerImageRoutes(app);
 
+  // Public endpoint — called during onboarding before account creation
+  app.get("/api/authors/search", async (req, res) => {
+    try {
+      const q = String(req.query.q || "").trim();
+      const languages = String(req.query.languages || "").trim();
+      const genres = String(req.query.genres || "").trim();
+      if (!q) return res.json([]);
+
+      const openaiInstance = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const contextParts: string[] = [];
+      if (languages) contextParts.push(`preferred languages: ${languages}`);
+      if (genres) contextParts.push(`preferred genres: ${genres}`);
+      const context = contextParts.length ? ` (User context — ${contextParts.join(", ")})` : "";
+
+      const response = await openaiInstance.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are a literary expert. Return a JSON object with an "authors" array of up to 8 REAL authors that best match the search query.${context} Each object must have exactly:
+- name: string (full author name)
+- knownFor: string (genre/style, e.g. "Literary Fiction, Short Stories")
+- language: string (the primary language they write in)
+Only include real, verifiable authors. If the query looks like a partial name, return authors whose names start with or closely match it. Return ONLY valid JSON: { "authors": [...] }`,
+          },
+          {
+            role: "user",
+            content: `Find authors matching: "${q}"`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const raw = response.choices[0].message.content || '{"authors":[]}';
+      const parsed = JSON.parse(raw);
+      res.json(Array.isArray(parsed.authors) ? parsed.authors : []);
+    } catch (err) {
+      console.error("Author search error:", err);
+      res.status(500).json({ error: "Failed to search authors" });
+    }
+  });
+
   app.put("/api/user/preferences", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;

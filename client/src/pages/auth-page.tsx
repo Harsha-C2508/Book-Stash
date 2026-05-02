@@ -18,6 +18,7 @@ import {
   Center,
   Badge,
   ScrollArea,
+  Loader,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -381,6 +382,9 @@ export default function AuthPage() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
   const [authorSearch, setAuthorSearch] = useState("");
+  const [aiAuthors, setAiAuthors] = useState<{ name: string; knownFor: string; language?: string }[]>([]);
+  const [isSearchingAI, setIsSearchingAI] = useState(false);
+  const [lastAiQuery, setLastAiQuery] = useState("");
   const [savingPrefs, setSavingPrefs] = useState(false);
 
   useEffect(() => {
@@ -434,6 +438,38 @@ export default function AuthPage() {
 
     return pool;
   }, [selectedLanguages, selectedGenres, authorSearch]);
+
+  // Debounced AI author search — triggers only when local list has no results
+  useEffect(() => {
+    const trimmed = authorSearch.trim();
+    if (!trimmed || filteredAuthors.length > 0) {
+      setAiAuthors([]);
+      setLastAiQuery("");
+      return;
+    }
+    if (trimmed === lastAiQuery) return;
+
+    const timer = setTimeout(async () => {
+      setIsSearchingAI(true);
+      try {
+        const params = new URLSearchParams({ q: trimmed });
+        if (selectedLanguages.length) params.set("languages", selectedLanguages.join(","));
+        if (selectedGenres.length) params.set("genres", selectedGenres.join(","));
+        const res = await fetch(`/api/authors/search?${params}`);
+        if (res.ok) {
+          const data = await res.json();
+          setAiAuthors(Array.isArray(data) ? data : []);
+          setLastAiQuery(trimmed);
+        }
+      } catch {
+        // silently ignore
+      } finally {
+        setIsSearchingAI(false);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [authorSearch, filteredAuthors.length, lastAiQuery, selectedLanguages, selectedGenres]);
 
   const toggleAuthor = (name: string) => {
     setSelectedAuthors((prev) =>
@@ -611,14 +647,76 @@ export default function AuthPage() {
                 {/* Author grid — no fixed height, scrollable */}
                 <ScrollArea h={400} type="auto" offsetScrollbars>
                   {filteredAuthors.length === 0 ? (
-                    <Center py="xl">
-                      <Stack align="center" gap="xs">
-                        <Text c="dimmed" size="sm">No authors match your search</Text>
-                        <Button variant="subtle" size="xs" onClick={() => setAuthorSearch("")}>
-                          Clear search
-                        </Button>
-                      </Stack>
-                    </Center>
+                    <Stack gap="md">
+                      {/* AI searching indicator */}
+                      {isSearchingAI && (
+                        <Center py="md">
+                          <Group gap="xs">
+                            <Loader size="xs" color="violet" />
+                            <Text size="sm" c="dimmed">Searching for authors…</Text>
+                          </Group>
+                        </Center>
+                      )}
+
+                      {/* AI results */}
+                      {!isSearchingAI && aiAuthors.length > 0 && (
+                        <Stack gap="xs">
+                          <Group gap="xs">
+                            <Badge color="violet" variant="light" size="sm" leftSection={<Star size={10} />}>
+                              Found online
+                            </Badge>
+                            <Text size="xs" c="dimmed">{aiAuthors.length} authors matched by AI</Text>
+                          </Group>
+                          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" pr="xs">
+                            {aiAuthors.map(({ name, knownFor, language }) => {
+                              const selected = selectedAuthors.includes(name);
+                              return (
+                                <Paper
+                                  key={name}
+                                  p="sm"
+                                  radius="md"
+                                  withBorder
+                                  style={{
+                                    cursor: "pointer",
+                                    borderColor: selected ? "var(--mantine-color-violet-5)" : "var(--mantine-color-violet-2)",
+                                    background: selected ? "var(--mantine-color-violet-0)" : "var(--mantine-color-violet-0)",
+                                    transition: "all 0.15s",
+                                  }}
+                                  onClick={() => toggleAuthor(name)}
+                                  data-testid={`card-author-ai-${name.replace(/\s+/g, "-")}`}
+                                >
+                                  <Group justify="space-between" wrap="nowrap">
+                                    <Stack gap={2}>
+                                      <Group gap={4}>
+                                        <Text fw={600} size="sm">{name}</Text>
+                                        <Badge size="xs" color="violet" variant="dot">{language}</Badge>
+                                      </Group>
+                                      <Text size="xs" c="dimmed">{knownFor}</Text>
+                                    </Stack>
+                                    {selected
+                                      ? <CheckCircle2 size={20} className="text-violet-600 shrink-0" />
+                                      : <Star size={16} className="text-violet-400 shrink-0" />
+                                    }
+                                  </Group>
+                                </Paper>
+                              );
+                            })}
+                          </SimpleGrid>
+                        </Stack>
+                      )}
+
+                      {/* Nothing at all */}
+                      {!isSearchingAI && aiAuthors.length === 0 && authorSearch.trim() && (
+                        <Center py="xl">
+                          <Stack align="center" gap="xs">
+                            <Text c="dimmed" size="sm">No authors found for "{authorSearch}"</Text>
+                            <Button variant="subtle" size="xs" onClick={() => setAuthorSearch("")}>
+                              Clear search
+                            </Button>
+                          </Stack>
+                        </Center>
+                      )}
+                    </Stack>
                   ) : (
                     <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" pr="xs">
                       {filteredAuthors.map(({ name, knownFor }) => {
