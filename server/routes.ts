@@ -220,13 +220,13 @@ Only include real, verifiable authors. If the query looks like a partial name, r
       if (hasPreferences) {
         const parts: string[] = [];
         if (preferredLanguages.length > 0) {
-          parts.push(`The user prefers books in these languages: ${preferredLanguages.join(", ")}. At least 70% of your recommendations MUST be in these languages.`);
+          parts.push(`The user prefers books in these languages: ${preferredLanguages.join(", ")}. Include books in these languages when you are 100% certain the title and author are real and accurate — do NOT invent titles just to fill the language quota. It is better to recommend a verified English book than a hallucinated regional-language title.`);
         }
         if (preferredGenres.length > 0) {
-          parts.push(`The user enjoys these genres: ${preferredGenres.join(", ")}. Prioritise these genres heavily.`);
+          parts.push(`The user enjoys these genres: ${preferredGenres.join(", ")}. Prioritise these genres.`);
         }
         if (favoriteAuthors.length > 0) {
-          parts.push(`The user's favourite authors are: ${favoriteAuthors.join(", ")}. Recommend books by similar or related authors.`);
+          parts.push(`The user's favourite authors include: ${favoriteAuthors.join(", ")}. Include books by these authors only if you are certain the specific title exists. Also recommend authors who write in a similar style.`);
         }
         personalisationNote = "\n\nPersonalisation instructions:\n" + parts.join("\n");
       }
@@ -241,22 +241,29 @@ Only include real, verifiable authors. If the query looks like a partial name, r
         messages: [
           {
             role: "system",
-            content: `You are a world-class librarian and literary curator. Return a JSON object with a "books" array containing exactly 50 recently released (2020–2025) book recommendations. Each object in the array must have these exact fields:
-- title: string (use the original language title)
-- searchTitle: string (the English translated title or romanized version — used for cover image search)
-- author: string
-- description: string (2–3 sentences max, in English)
+            content: `You are a world-class librarian and literary curator. Return a JSON object with a "books" array containing exactly 50 book recommendations. Each object must have these exact fields:
+- title: string (exact original-language title of the book)
+- searchTitle: string (the English translated title or romanized/transliterated version — used for cover image lookup)
+- author: string (exact real author name)
+- description: string (2–3 sentences in English describing the book)
 - language: string (e.g. "English", "Spanish", "French", "Malayalam", "Japanese", "Arabic", "German", "Hindi", "Korean", "Portuguese", "Italian", "Turkish", "Russian", "Chinese", "Bengali")
-- year: string (publication year between 2020 and 2025)
+- year: string (publication year as a 4-digit string)
 - genre: string (e.g. "Fiction", "Non-Fiction", "Mystery", "Science", "Biography", "Romance", "Thriller", "Poetry")
 
-Prefer well-known books that are likely to be indexed in Google Books. Return ONLY valid JSON with this structure: { "books": [...] }${personalisationNote}`
+CRITICAL RULES — you must follow these exactly:
+1. Every single book must be 100% real and verifiable. Never invent or hallucinate a title or author. If you are not completely certain a book exists, omit it.
+2. Only recommend books published between 2015 and 2024. Do not include books from 2025.
+3. The title and author must be exactly correct — no approximations or made-up names.
+4. For non-English languages (especially regional languages like Malayalam, Tamil, Bengali, Hindi), only include books you are highly confident about. If unsure, replace with a well-known title from a major language you are certain about.
+5. Prefer books that are widely available on Google Books or Open Library.
+
+Return ONLY valid JSON: { "books": [...] }${personalisationNote}`
           },
           {
             role: "user",
             content: hasPreferences
-              ? "Give me 50 personalised recent book recommendations based on my language and genre preferences, published between 2020 and 2025."
-              : "Give me 50 diverse recent book recommendations from different languages and cultures published between 2020 and 2025."
+              ? "Give me 50 personalised book recommendations based on my language and genre preferences. Only include books you are 100% certain are real."
+              : "Give me 50 diverse book recommendations from different languages and cultures. Only include books you are 100% certain are real."
           }
         ],
         response_format: { type: "json_object" },
@@ -283,28 +290,49 @@ Prefer well-known books that are likely to be indexed in Google Books. Return ON
         bookList = (firstArray as any[]) || [];
       }
 
-      // Fetch cover images: try Google Books first, fall back to Open Library
+      // Helper: check whether two strings share at least one significant word
+      function wordsOverlap(a: string, b: string): boolean {
+        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+        const wa = norm(a).split(/\s+/).filter(w => w.length > 2);
+        const wb = new Set(norm(b).split(/\s+/).filter(w => w.length > 2));
+        return wa.some(w => wb.has(w));
+      }
+
+      // Fetch cover images: try Google Books first, fall back to Open Library.
+      // IMPORTANT: validate that the returned result actually matches the
+      // requested book before accepting its cover — mismatches mean a wrong cover.
       const withCovers = await Promise.all(
         bookList.map(async (book: any) => {
-          // Prefer the English/romanized searchTitle for better API matching
           const lookupTitle = (book.searchTitle || book.title).slice(0, 80);
-          const lookupAuthor = book.author.split(' ').slice(-1)[0]; // last name only
+          // Use full author name for better precision (not just last name)
+          const lookupAuthor = book.author.slice(0, 60);
 
           // ── Step 1: Google Books API ──────────────────────────────────────
           try {
             const q = encodeURIComponent(`intitle:${lookupTitle} inauthor:${lookupAuthor}`);
             const gbRes = await fetch(
-              `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&printType=books`,
+              `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=3&printType=books`,
               { signal: AbortSignal.timeout(5000) }
             );
             if (gbRes.ok) {
               const gbData = await gbRes.json();
-              const imageLinks = gbData?.items?.[0]?.volumeInfo?.imageLinks;
-              const raw = imageLinks?.thumbnail || imageLinks?.smallThumbnail;
-              if (raw) {
-                // Google Books serves http — upgrade to https and increase zoom
-                const coverUrl = raw.replace('http://', 'https://').replace('zoom=1', 'zoom=2');
-                return { ...book, coverUrl };
+              const items: any[] = gbData?.items || [];
+              for (const item of items) {
+                const info = item?.volumeInfo || {};
+                const returnedTitle: string = info.title || '';
+                const returnedAuthors: string[] = info.authors || [];
+                // Validate: BOTH title AND author must overlap with what we
+                // requested — a title-only match (e.g. "Sherlock" matching
+                // Sherlock Holmes by Doyle) is not enough to trust the cover.
+                const titleOk = wordsOverlap(returnedTitle, lookupTitle);
+                const authorOk = returnedAuthors.some(a => wordsOverlap(a, lookupAuthor));
+                if (!titleOk || !authorOk) continue; // skip — wrong book
+                const imageLinks = info.imageLinks;
+                const rawUrl = imageLinks?.thumbnail || imageLinks?.smallThumbnail;
+                if (rawUrl) {
+                  const coverUrl = rawUrl.replace('http://', 'https://').replace('zoom=1', 'zoom=2');
+                  return { ...book, coverUrl };
+                }
               }
             }
           } catch { /* timeout — try next source */ }
@@ -314,17 +342,24 @@ Prefer well-known books that are likely to be indexed in Google Books. Return ON
             const t = encodeURIComponent(lookupTitle);
             const a = encodeURIComponent(lookupAuthor);
             const olRes = await fetch(
-              `https://openlibrary.org/search.json?title=${t}&author=${a}&limit=1&fields=cover_i,isbn`,
+              `https://openlibrary.org/search.json?title=${t}&author=${a}&limit=3&fields=cover_i,isbn,title,author_name`,
               { signal: AbortSignal.timeout(5000) }
             );
             if (olRes.ok) {
               const olData = await olRes.json();
-              const doc = olData?.docs?.[0];
-              if (doc?.cover_i) {
-                return { ...book, coverUrl: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` };
-              }
-              if (doc?.isbn?.[0]) {
-                return { ...book, coverUrl: `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg` };
+              const docs: any[] = olData?.docs || [];
+              for (const doc of docs) {
+                const returnedTitle: string = doc.title || '';
+                const returnedAuthors: string[] = doc.author_name || [];
+                const titleOk = wordsOverlap(returnedTitle, lookupTitle);
+                const authorOk = returnedAuthors.some((a: string) => wordsOverlap(a, lookupAuthor));
+                if (!titleOk || !authorOk) continue; // skip — wrong book, require both
+                if (doc.cover_i) {
+                  return { ...book, coverUrl: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` };
+                }
+                if (doc.isbn?.[0]) {
+                  return { ...book, coverUrl: `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg` };
+                }
               }
             }
           } catch { /* skip */ }
