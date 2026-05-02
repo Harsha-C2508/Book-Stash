@@ -614,7 +614,11 @@ export default function AuthPage() {
                   placeholder="Search by name or genre…"
                   leftSection={<Search size={15} />}
                   rightSection={
-                    authorSearch ? (
+                    isSearchingAI ? (
+                      <Loader size={14} color="violet" />
+                    ) : authorSearch && filteredAuthors.length === 0 && aiAuthors.length === 0 && authorSearch.trim() !== lastAiQuery ? (
+                      <Loader size={14} color="violet" type="dots" />
+                    ) : authorSearch ? (
                       <X
                         size={15}
                         style={{ cursor: "pointer", opacity: 0.5 }}
@@ -648,13 +652,15 @@ export default function AuthPage() {
                 <ScrollArea h={400} type="auto" offsetScrollbars>
                   {filteredAuthors.length === 0 ? (
                     <Stack gap="md">
-                      {/* AI searching indicator */}
-                      {isSearchingAI && (
-                        <Center py="md">
-                          <Group gap="xs">
-                            <Loader size="xs" color="violet" />
-                            <Text size="sm" c="dimmed">Searching for authors…</Text>
-                          </Group>
+                      {/* AI searching indicator — shown during debounce wait AND active fetch */}
+                      {(isSearchingAI || (authorSearch.trim() && aiAuthors.length === 0 && authorSearch.trim() !== lastAiQuery)) && (
+                        <Center py="xl">
+                          <Stack align="center" gap="xs">
+                            <Loader size="sm" color="violet" type="dots" />
+                            <Text size="sm" c="dimmed">
+                              {isSearchingAI ? "Searching for authors online…" : "Looking up authors…"}
+                            </Text>
+                          </Stack>
                         </Center>
                       )}
 
@@ -705,8 +711,8 @@ export default function AuthPage() {
                         </Stack>
                       )}
 
-                      {/* Nothing at all */}
-                      {!isSearchingAI && aiAuthors.length === 0 && authorSearch.trim() && (
+                      {/* Nothing at all — only show after AI has actually responded */}
+                      {!isSearchingAI && aiAuthors.length === 0 && authorSearch.trim() && authorSearch.trim() === lastAiQuery && (
                         <Center py="xl">
                           <Stack align="center" gap="xs">
                             <Text c="dimmed" size="sm">No authors found for "{authorSearch}"</Text>
