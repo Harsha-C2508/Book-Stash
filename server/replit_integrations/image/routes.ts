@@ -1,5 +1,12 @@
 import type { Express, Request, Response } from "express";
-import { openai } from "./client";
+import OpenAI from "openai";
+
+function getOpenAI(): OpenAI {
+  return new OpenAI({
+    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  });
+}
 
 export function registerImageRoutes(app: Express): void {
   app.post("/api/generate-image", async (req: Request, res: Response) => {
@@ -10,7 +17,7 @@ export function registerImageRoutes(app: Express): void {
         return res.status(400).json({ error: "Prompt is required" });
       }
 
-      const response = await openai.images.generate({
+      const response = await getOpenAI().images.generate({
         model: "gpt-image-1",
         prompt,
         n: 1,
