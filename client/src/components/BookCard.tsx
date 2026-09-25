@@ -41,16 +41,16 @@ export function BookCard({ book, onOpenDetails }: { book: Book; onOpenDetails?: 
       className="h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer"
       onClick={() => onOpenDetails?.(book)}
     >
-      <Card.Section>
+      <Card.Section style={{ height: 280, overflow: 'hidden' }}>
         {book.coverUrl ? (
           <Image
             src={book.coverUrl}
-            height={200}
+            h={280}
             alt={book.title}
             fit="cover"
           />
         ) : (
-          <Box h={200} bg="var(--mantine-color-gray-1)" className="flex items-center justify-center">
+          <Box h={280} bg="var(--mantine-color-gray-1)" className="flex items-center justify-center">
              <BookOpen size={48} className="text-gray-300" />
           </Box>
         )}
