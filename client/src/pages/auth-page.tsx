@@ -486,11 +486,14 @@ export default function AuthPage() {
           if (selectedLanguages.length || selectedGenres.length || selectedAuthors.length) {
             setSavingPrefs(true);
             try {
-              await apiRequest("PUT", "/api/user/preferences", {
+              const res = await apiRequest("PUT", "/api/user/preferences", {
                 preferredLanguages: selectedLanguages,
                 preferredGenres: selectedGenres,
                 favoriteAuthors: selectedAuthors,
               });
+              // Update cached user with saved preferences
+              const updatedUser = await res.json();
+              queryClient.setQueryData(["/api/user"], updatedUser);
             } catch {
               // Non-critical — ignore
             } finally {

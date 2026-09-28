@@ -29,6 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: User) => {
+      // Clear all cached data from previous session, then set fresh user
+      queryClient.clear();
       queryClient.setQueryData(["/api/user"], user);
     },
     onError: () => {
@@ -63,6 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
+      // Clear all cached data so next login starts fresh
+      queryClient.clear();
       queryClient.setQueryData(["/api/user"], null);
     },
     onError: (error: Error) => {
