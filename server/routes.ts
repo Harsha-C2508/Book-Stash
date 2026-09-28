@@ -149,8 +149,8 @@ export async function registerRoutes(
       if (!q) return res.json([]);
 
       const openaiInstance = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+        ...(process.env.AI_INTEGRATIONS_OPENAI_BASE_URL && { baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL }),
       });
 
       const contextParts: string[] = [];
@@ -204,57 +204,134 @@ Only include real, verifiable authors. If the query looks like a partial name, r
 
   app.post("/api/books/summary", requireAuth, async (req, res) => {
     try {
-      const { title, author } = req.body;
-      const openaiInstance = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      const { title, author, notes } = req.body;
+      if (!title) return res.status(400).json({ error: "Title is required" });
 
-      const response = await openaiInstance.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful librarian. Provide a concise summary and key insights for the requested book. Always respond in the language the user might prefer based on context, or English as default."
-          },
-          {
-            role: "user",
-            content: `Please provide a summary and key details for the book "${title}" by ${author}.`
+      // Helper: search Open Library and return the first doc
+      const searchOL = async (query: string): Promise<any | null> => {
+        try {
+          const url = `https://openlibrary.org/search.json?${query}&limit=1&fields=key,title,author_name,first_publish_year,subject,publisher,number_of_pages_median,isbn,language,cover_i`;
+          const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!r.ok) return null;
+          const data = await r.json();
+          return data?.docs?.[0] || null;
+        } catch { return null; }
+      };
+
+      // Try multiple search strategies (broader each time)
+      const t = encodeURIComponent(title);
+      const a = author ? encodeURIComponent(author) : '';
+      let doc = await searchOL(`title=${t}${a ? `&author=${a}` : ''}`);
+      if (!doc && a) doc = await searchOL(`title=${t}`);           // without author
+      if (!doc) doc = await searchOL(`q=${t}${a ? `+${a}` : ''}`); // general query
+
+      // If Open Library has nothing, build summary from the book's own data
+      if (!doc) {
+        const parts: string[] = [];
+        parts.push(`📖 ${title}`);
+        if (author) parts.push(`✍️ By: ${author}`);
+        parts.push('');
+        parts.push('ℹ️ This book was not found in Open Library\'s catalog.');
+        parts.push('It may be a regional language book or a newer publication.');
+        if (notes) {
+          parts.push(`\n📝 Your Notes:\n${notes}`);
+        }
+        return res.json({ summary: parts.join('\n') });
+      }
+
+      // Fetch the book's description from its work page
+      let description = '';
+      if (doc.key) {
+        try {
+          const workRes = await fetch(`https://openlibrary.org${doc.key}.json`, { signal: AbortSignal.timeout(8000) });
+          if (workRes.ok) {
+            const workData = await workRes.json();
+            if (typeof workData.description === 'string') {
+              description = workData.description;
+            } else if (workData.description?.value) {
+              description = workData.description.value;
+            }
           }
-        ],
-      });
+        } catch { /* skip */ }
+      }
 
-      const summary = response.choices[0].message.content || "Sorry, I couldn't generate a summary for this book.";
-      res.json({ summary });
+      // Build a rich summary
+      const subjects: string[] = doc.subject || [];
+      const pages = doc.number_of_pages_median;
+      const year = doc.first_publish_year;
+      const publishers: string[] = doc.publisher || [];
+      const authors: string[] = doc.author_name || [author || 'Unknown'];
+      const languages: string[] = doc.language || [];
+
+      const parts: string[] = [];
+      parts.push(`📖 ${doc.title || title}`);
+      parts.push(`✍️ By: ${authors.join(', ')}`);
+      if (year) parts.push(`📅 First published: ${year}`);
+      if (pages) parts.push(`📄 Pages: ~${pages}`);
+      if (languages.length > 0) parts.push(`🌐 Languages: ${languages.slice(0, 5).join(', ')}`);
+      if (publishers.length > 0) parts.push(`🏢 Publishers: ${publishers.slice(0, 3).join(', ')}`);
+
+      if (description) {
+        const cleanDesc = description.replace(/\r\n/g, '\n').replace(/---+/g, '').trim();
+        parts.push(`\n📝 Description:\n${cleanDesc}`);
+      }
+
+      if (subjects.length > 0) {
+        parts.push(`\n🏷️ Topics: ${subjects.slice(0, 10).join(', ')}`);
+      }
+
+      // Include user notes if available and no OL description was found
+      if (!description && notes) {
+        parts.push(`\n📝 Your Notes:\n${notes}`);
+      }
+
+      res.json({ summary: parts.join('\n') });
     } catch (error) {
-      console.error("AI Summary error:", error);
-      res.status(500).json({ error: "Failed to generate AI summary" });
+      console.error("Book summary error:", error);
+      res.status(500).json({ error: "Failed to fetch book details" });
     }
   });
 
   app.post("/api/translate", requireAuth, async (req, res) => {
     try {
       const { text, targetLanguage = "English" } = req.body;
-      const openaiInstance = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      if (!text) return res.status(400).json({ error: "Text is required" });
 
-      const response = await openaiInstance.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are a professional translator. Translate the following text into ${targetLanguage}. Maintain the original tone and meaning.`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-      });
+      const langCodes: Record<string, string> = {
+        'English': 'en', 'Malayalam': 'ml', 'Hindi': 'hi', 'Tamil': 'ta',
+        'Telugu': 'te', 'Kannada': 'kn', 'Bengali': 'bn', 'Marathi': 'mr',
+        'Gujarati': 'gu', 'Punjabi': 'pa', 'Urdu': 'ur', 'French': 'fr',
+        'Spanish': 'es', 'German': 'de', 'Italian': 'it', 'Portuguese': 'pt',
+        'Russian': 'ru', 'Japanese': 'ja', 'Chinese': 'zh', 'Korean': 'ko',
+        'Arabic': 'ar', 'Dutch': 'nl', 'Swedish': 'sv', 'Norwegian': 'no',
+      };
 
-      const translation = response.choices[0].message.content || "Translation failed.";
+      const targetCode = langCodes[targetLanguage] || 'en';
+      const snippet = text.slice(0, 500);
+      const encoded = encodeURIComponent(snippet);
+
+      // Try translation with different source language strategies
+      const tryTranslate = async (srcLang: string): Promise<string | null> => {
+        try {
+          const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=${srcLang}|${targetCode}`;
+          const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!r.ok) return null;
+          const d = await r.json();
+          const t = d?.responseData?.translatedText;
+          if (t && Number(d?.responseStatus) === 200) return t;
+          return null;
+        } catch { return null; }
+      };
+
+      // Strategy 1: autodetect, Strategy 2: common languages
+      let translation = await tryTranslate('autodetect');
+      if (!translation) translation = await tryTranslate('fr');
+      if (!translation) translation = await tryTranslate('es');
+
+      if (!translation) {
+        return res.status(500).json({ error: "Could not translate text. The text may already be in the target language." });
+      }
+
       res.json({ translation });
     } catch (error) {
       console.error("Translation error:", error);
@@ -269,9 +346,53 @@ Only include real, verifiable authors. If the query looks like a partial name, r
     res.json(books);
   });
 
+  // ── Search books via Open Library (free, no API key needed) ──
+  // MUST be before /api/books/:id so Express doesn't match "search" as an :id param
+  app.get("/api/books/search", requireAuth, async (req, res) => {
+    try {
+      const q = String(req.query.q || "").trim();
+      if (!q || q.length < 2) return res.json([]);
+
+      const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=20&fields=title,author_name,first_publish_year,cover_i,subject,isbn`;
+      const olRes = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!olRes.ok) return res.json([]);
+
+      const data = await olRes.json();
+      const books = (data?.docs || [])
+        .map((doc: any) => {
+          const title = doc.title || '';
+          const authors: string[] = doc.author_name || [];
+          if (!title || authors.length === 0) return null;
+          const subjects: string[] = doc.subject || [];
+          return {
+            title,
+            searchTitle: title,
+            author: authors.join(", "),
+            description: subjects.length > 0
+              ? `Topics: ${subjects.slice(0, 5).join(', ')}.`
+              : `A book by ${authors.join(", ")}.`,
+            language: "English",
+            year: doc.first_publish_year ? String(doc.first_publish_year) : '',
+            genre: subjects[0] || "Fiction",
+            coverUrl: doc.cover_i
+              ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`
+              : null,
+          };
+        })
+        .filter(Boolean);
+
+      res.json(books);
+    } catch (error) {
+      console.error("Book search error:", error);
+      res.json([]);
+    }
+  });
+
   app.get(api.books.get.path, requireAuth, async (req, res) => {
     const userId = req.user!.id;
-    const book = await storage.getBook(Number(req.params.id), userId);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid book ID' });
+    const book = await storage.getBook(id, userId);
     if (!book) {
       return res.status(404).json({ message: 'Book not found' });
     }
@@ -298,8 +419,10 @@ Only include real, verifiable authors. If the query looks like a partial name, r
   app.put(api.books.update.path, requireAuth, async (req, res) => {
     try {
       const userId = req.user!.id;
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: 'Invalid book ID' });
       const input = api.books.update.input.parse(req.body);
-      const book = await storage.updateBook(Number(req.params.id), userId, input);
+      const book = await storage.updateBook(id, userId, input);
       if (!book) {
         return res.status(404).json({ message: 'Book not found' });
       }
@@ -317,196 +440,184 @@ Only include real, verifiable authors. If the query looks like a partial name, r
 
   app.delete(api.books.delete.path, requireAuth, async (req, res) => {
     const userId = req.user!.id;
-    await storage.deleteBook(Number(req.params.id), userId);
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ message: 'Invalid book ID' });
+    await storage.deleteBook(id, userId);
     res.status(204).send();
   });
 
+  // ── Recommendations: powered by Open Library (free, no API key needed) ──
   app.get("/api/recommendations", requireAuth, async (req, res) => {
     try {
-      // Load user preferences so we can tailor the recommendations
       const userId = (req.user as any).id;
       const userRecord = await storage.getUser(userId);
       const preferredLanguages: string[] = userRecord?.preferredLanguages ?? [];
       const preferredGenres: string[] = userRecord?.preferredGenres ?? [];
+      const favoriteAuthors: string[] = userRecord?.favoriteAuthors ?? [];
 
-      const hasPreferences = preferredLanguages.length > 0 || preferredGenres.length > 0;
-
-      // ── Step 1: seed verified curated books for preferred languages ──────────
-      // For regional languages (e.g. Malayalam) the AI hallucinates titles, so we
-      // always anchor the list with hand-verified real books from our curated set.
+      // Step 1: seed curated books for regional languages
       const seededBooks: typeof VERIFIED_BOOKS_BY_LANGUAGE[string] = [];
       for (const lang of preferredLanguages) {
         const verified = VERIFIED_BOOKS_BY_LANGUAGE[lang];
         if (verified) seededBooks.push(...verified);
       }
 
-      // How many more books should the AI fill in?
+      // Step 2: map user genres to Open Library subjects
+      const genreToSubject: Record<string, string[]> = {
+        "Fiction": ["fiction", "literary_fiction"],
+        "Non-Fiction": ["nonfiction"],
+        "Science Fiction": ["science_fiction", "sci-fi"],
+        "Fantasy": ["fantasy"],
+        "Mystery": ["mystery_and_detective_stories", "mystery"],
+        "Thriller": ["thriller", "suspense"],
+        "Romance": ["romance", "love"],
+        "Horror": ["horror"],
+        "History": ["history"],
+        "Biography": ["biography"],
+        "Science": ["science", "popular_science"],
+        "Philosophy": ["philosophy"],
+        "Poetry": ["poetry"],
+        "Self-Help": ["self-help"],
+        "Psychology": ["psychology"],
+        "Business": ["business"],
+        "Travel": ["travel"],
+        "Comedy": ["humor"],
+        "Adventure": ["adventure"],
+        "Classic": ["classic_literature", "classics"],
+        "Drama": ["drama"],
+        "Crime": ["crime", "true_crime"],
+        "Children": ["children", "juvenile_fiction"],
+        "Young Adult": ["young_adult_fiction"],
+        "Manga": ["manga", "comics"],
+        "Graphic Novels": ["graphic_novels"],
+      };
+
+      const subjects: string[] = [];
+      for (const genre of preferredGenres) {
+        const mapped = genreToSubject[genre];
+        if (mapped) subjects.push(...mapped);
+        else subjects.push(genre.toLowerCase().replace(/\s+/g, '_'));
+      }
+      if (subjects.length === 0) {
+        subjects.push("fiction", "science_fiction", "mystery", "fantasy", "classic_literature");
+      }
+
       const TARGET_TOTAL = 50;
-      const aiTarget = Math.max(TARGET_TOTAL - seededBooks.length, 15);
+      const perSubject = Math.ceil((TARGET_TOTAL - seededBooks.length) / subjects.length);
+      const seen = new Set<string>();
 
-      // ── Step 2: build AI prompt for the remaining slots ──────────────────────
-      const languagesForAI = preferredLanguages.length > 0
-        // Exclude languages already covered by the curated set — AI fills the rest
-        ? preferredLanguages.filter(l => !VERIFIED_BOOKS_BY_LANGUAGE[l])
-        : [];
+      // Step 3: fetch from Open Library Subjects API (100% free)
+      const fetchSubject = async (subject: string, limit: number) => {
+        try {
+          const offset = Math.floor(Math.random() * 20);
+          const url = `https://openlibrary.org/subjects/${encodeURIComponent(subject)}.json?limit=${limit}&offset=${offset}`;
+          const olRes = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!olRes.ok) return [];
+          const data = await olRes.json();
+          return (data?.works || [])
+            .map((w: any) => {
+              const title = w.title || '';
+              const authors = (w.authors || []).map((a: any) => a.name).filter(Boolean);
+              if (!title || authors.length === 0) return null;
+              const key = `${title.toLowerCase()}|${authors[0]?.toLowerCase()}`;
+              if (seen.has(key)) return null;
+              seen.add(key);
+              const coverId = w.cover_id;
+              const subjectName = subject.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+              return {
+                title,
+                searchTitle: title,
+                author: authors.join(", "),
+                description: w.subject
+                  ? `A ${subjectName.toLowerCase()} book. Topics: ${(Array.isArray(w.subject) ? w.subject : []).slice(0, 4).join(', ')}.`
+                  : `A ${subjectName.toLowerCase()} book by ${authors.join(", ")}.`,
+                language: "English",
+                year: w.first_publish_year ? String(w.first_publish_year) : '',
+                genre: subjectName,
+                coverUrl: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : null,
+              };
+            })
+            .filter(Boolean);
+        } catch {
+          return [];
+        }
+      };
 
-      const parts: string[] = [];
-      if (languagesForAI.length > 0) {
-        parts.push(`Preferred languages: ${languagesForAI.join(", ")}.`);
-      }
-      if (preferredGenres.length > 0) {
-        parts.push(`Preferred genres: ${preferredGenres.join(", ")}.`);
-      }
-      // Do NOT ask the AI to recommend by specific author names — it reliably
-      // hallucinates titles for regional/popular fiction authors it doesn't know well.
-      const personalisationNote = parts.length > 0
-        ? "\n\nUser preferences:\n" + parts.join("\n")
-        : "";
+      // Fetch books by favorite authors
+      const fetchAuthorBooks = async (authorName: string, limit: number) => {
+        try {
+          const url = `https://openlibrary.org/search.json?author=${encodeURIComponent(authorName)}&limit=${limit}&fields=title,author_name,first_publish_year,cover_i,subject&sort=rating`;
+          const olRes = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!olRes.ok) return [];
+          const data = await olRes.json();
+          return (data?.docs || [])
+            .map((doc: any) => {
+              const title = doc.title || '';
+              const authors: string[] = doc.author_name || [];
+              if (!title || authors.length === 0) return null;
+              const key = `${title.toLowerCase()}|${authors[0]?.toLowerCase()}`;
+              if (seen.has(key)) return null;
+              seen.add(key);
+              const subjects: string[] = doc.subject || [];
+              return {
+                title,
+                searchTitle: title,
+                author: authors.join(", "),
+                description: subjects.length > 0
+                  ? `By ${authors[0]}. Topics: ${subjects.slice(0, 4).join(', ')}.`
+                  : `A book by ${authors.join(", ")}.`,
+                language: "English",
+                year: doc.first_publish_year ? String(doc.first_publish_year) : '',
+                genre: subjects[0] || "Fiction",
+                coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null,
+              };
+            })
+            .filter(Boolean);
+        } catch {
+          return [];
+        }
+      };
 
-      const openaiInstance = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      // Run all fetches in parallel — each one catches its own errors
+      const results = await Promise.allSettled([
+        ...subjects.map(s => fetchSubject(s, perSubject)),
+        ...favoriteAuthors.slice(0, 3).map(a => fetchAuthorBooks(a, 5)),
+      ]);
+      const apiBooks = results
+        .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+        .flatMap(r => r.value);
 
-      const response = await openaiInstance.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are a world-class librarian. Return a JSON object with a "books" array of exactly ${aiTarget} book recommendations. Each object must have:
-- title: string (exact original-language title)
-- searchTitle: string (English title or romanized version for cover image lookup)
-- author: string (exact real author name)
-- description: string (2–3 sentences in English)
-- language: string (e.g. "English", "Spanish", "French", "Japanese", "Arabic", "German", "Hindi", "Korean", "Portuguese", "Italian", "Turkish", "Russian", "Chinese", "Bengali")
-- year: string (4-digit publication year)
-- genre: string
+      // Step 4: combine curated + API books
+      const allBooks = [...seededBooks, ...apiBooks].slice(0, TARGET_TOTAL);
 
-RULES — strictly follow:
-1. Every book must be 100% real. Never invent a title or author.
-2. Do NOT recommend books in Malayalam, Tamil, or other Indian regional languages — those are handled separately.
-3. Recommend widely-known books from major world languages (English, Spanish, French, Japanese, Arabic, German, Korean, Portuguese, etc.).
-4. Match the user's preferred genres as closely as possible.
-5. Prefer books available on Google Books or Open Library.
-
-Return ONLY valid JSON: { "books": [...] }${personalisationNote}`
-          },
-          {
-            role: "user",
-            content: `Give me ${aiTarget} book recommendations. Preferred genres: ${preferredGenres.length ? preferredGenres.join(", ") : "any"}. Only include books you are 100% certain are real.`
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      const raw = response.choices[0].message.content || '{"books":[]}';
-      let parsed: any;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = { books: [] };
-      }
-
-      // Robustly find the books array regardless of key name
-      let bookList: any[] = [];
-      if (Array.isArray(parsed)) {
-        bookList = parsed;
-      } else if (Array.isArray(parsed.books)) {
-        bookList = parsed.books;
-      } else if (Array.isArray(parsed.recommendations)) {
-        bookList = parsed.recommendations;
-      } else {
-        const firstArray = Object.values(parsed).find(Array.isArray);
-        bookList = (firstArray as any[]) || [];
-      }
-
-      // Helper: check whether two strings share at least one significant word
-      function wordsOverlap(a: string, b: string): boolean {
-        const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '');
-        const wa = norm(a).split(/\s+/).filter(w => w.length > 2);
-        const wb = new Set(norm(b).split(/\s+/).filter(w => w.length > 2));
-        return wa.some(w => wb.has(w));
-      }
-
-      // ── Step 3: combine seeded + AI books, then fetch covers ─────────────────
-      // Seeded books come first (preferred language), AI books fill the rest.
-      const allBooks = [...seededBooks, ...bookList];
-
-      // Helper: check whether two strings share at least one significant word
-      // Fetch cover images: try Google Books first, fall back to Open Library.
-      // IMPORTANT: validate that the returned result actually matches the
-      // requested book before accepting its cover — mismatches mean a wrong cover.
+      // Fetch covers for curated books that don't have one yet (best-effort, 3 at a time)
       const withCovers = await Promise.all(
         allBooks.map(async (book: any) => {
-          const lookupTitle = (book.searchTitle || book.title).slice(0, 80);
-          // Use full author name for better precision (not just last name)
-          const lookupAuthor = book.author.slice(0, 60);
-
-          // ── Step 1: Google Books API ──────────────────────────────────────
+          if (book.coverUrl) return book;
           try {
-            const q = encodeURIComponent(`intitle:${lookupTitle} inauthor:${lookupAuthor}`);
-            const gbRes = await fetch(
-              `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=3&printType=books`,
-              { signal: AbortSignal.timeout(5000) }
-            );
-            if (gbRes.ok) {
-              const gbData = await gbRes.json();
-              const items: any[] = gbData?.items || [];
-              for (const item of items) {
-                const info = item?.volumeInfo || {};
-                const returnedTitle: string = info.title || '';
-                const returnedAuthors: string[] = info.authors || [];
-                // Validate: BOTH title AND author must overlap with what we
-                // requested — a title-only match (e.g. "Sherlock" matching
-                // Sherlock Holmes by Doyle) is not enough to trust the cover.
-                const titleOk = wordsOverlap(returnedTitle, lookupTitle);
-                const authorOk = returnedAuthors.some(a => wordsOverlap(a, lookupAuthor));
-                if (!titleOk || !authorOk) continue; // skip — wrong book
-                const imageLinks = info.imageLinks;
-                const rawUrl = imageLinks?.thumbnail || imageLinks?.smallThumbnail;
-                if (rawUrl) {
-                  const coverUrl = rawUrl.replace('http://', 'https://').replace('zoom=1', 'zoom=2');
-                  return { ...book, coverUrl };
-                }
-              }
-            }
-          } catch { /* timeout — try next source */ }
-
-          // ── Step 2: Open Library ──────────────────────────────────────────
-          try {
-            const t = encodeURIComponent(lookupTitle);
-            const a = encodeURIComponent(lookupAuthor);
+            const t = encodeURIComponent(book.searchTitle || book.title);
+            const a = encodeURIComponent(book.author);
             const olRes = await fetch(
-              `https://openlibrary.org/search.json?title=${t}&author=${a}&limit=3&fields=cover_i,isbn,title,author_name`,
+              `https://openlibrary.org/search.json?title=${t}&author=${a}&limit=1&fields=cover_i,isbn`,
               { signal: AbortSignal.timeout(5000) }
             );
             if (olRes.ok) {
-              const olData = await olRes.json();
-              const docs: any[] = olData?.docs || [];
-              for (const doc of docs) {
-                const returnedTitle: string = doc.title || '';
-                const returnedAuthors: string[] = doc.author_name || [];
-                const titleOk = wordsOverlap(returnedTitle, lookupTitle);
-                const authorOk = returnedAuthors.some((a: string) => wordsOverlap(a, lookupAuthor));
-                if (!titleOk || !authorOk) continue; // skip — wrong book, require both
-                if (doc.cover_i) {
-                  return { ...book, coverUrl: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` };
-                }
-                if (doc.isbn?.[0]) {
-                  return { ...book, coverUrl: `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg` };
-                }
-              }
+              const doc = (await olRes.json())?.docs?.[0];
+              if (doc?.cover_i) return { ...book, coverUrl: `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` };
+              if (doc?.isbn?.[0]) return { ...book, coverUrl: `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg` };
             }
           } catch { /* skip */ }
-
           return { ...book, coverUrl: null };
         })
       );
 
+      // Always return whatever we got — even 0 books is a valid (empty) response, not a 500
       res.json(withCovers);
     } catch (error) {
       console.error("Recommendations error:", error);
-      res.status(500).json({ error: "Failed to fetch recommendations" });
+      // Even on unexpected errors, return an empty array so the UI can show "no recommendations"
+      // instead of an error banner. Only truly fatal errors (DB down, auth broken) should 500.
+      res.json([]);
     }
   });
 

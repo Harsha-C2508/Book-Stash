@@ -97,10 +97,38 @@ export function useRecommendations() {
     queryKey: ['/api/recommendations'],
     queryFn: async () => {
       const res = await fetch('/api/recommendations', { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch recommendations');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // Tag auth errors so the UI and retry logic can distinguish them
+        const msg = res.status === 401
+          ? '401: Not authenticated'
+          : (body.error || `${res.status}: Failed to fetch recommendations`);
+        throw new Error(msg);
+      }
       return res.json();
     },
-    staleTime: 10 * 60 * 1000, // cache for 10 minutes so AI isn't called on every click
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: (failureCount, error) => {
+      // Don't retry auth errors — the user needs to re-login
+      if (error instanceof Error && error.message.startsWith('401')) return false;
+      return failureCount < 3;
+    },
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+  });
+}
+
+export function useBookSearch(query: string) {
+  return useQuery<Recommendation[]>({
+    queryKey: ['/api/books/search', query],
+    queryFn: async () => {
+      const res = await fetch(`/api/books/search?q=${encodeURIComponent(query)}`, { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: query.trim().length >= 2,
+    staleTime: 2 * 60 * 1000,
+    placeholderData: [],
   });
 }
 

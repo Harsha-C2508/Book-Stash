@@ -23,9 +23,10 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash, Search, LogOut, Sparkles, RefreshCw } from 'lucide-react';
-import { useBooks, useRecommendations } from '@/hooks/use-books';
+import { Plus, LibraryBig, ShoppingBag, BookMarked, Bell, Trash, Search, LogOut, Sparkles, RefreshCw, UserCircle } from 'lucide-react';
+import { useBooks, useRecommendations, useBookSearch } from '@/hooks/use-books';
 import { useAuth } from '@/hooks/use-auth';
+import { useLocation } from 'wouter';
 import { BookCard } from '@/components/BookCard';
 import { BookForm } from '@/components/BookForm';
 import { BookDetailsDrawer } from '@/components/BookDetailsDrawer';
@@ -42,6 +43,7 @@ interface NotificationMessage {
 
 export default function Dashboard() {
   const { user, logoutMutation } = useAuth();
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string | null>('purchased');
   const [opened, { open, close }] = useDisclosure(false);
@@ -51,8 +53,15 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpened, setSearchOpened] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [discoverGenre, setDiscoverGenre] = useState<string | null>(null);
   const [discoverLang, setDiscoverLang] = useState<string | null>(null);
+
+  // Debounce the search input for live Open Library search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(discoverSearch), 400);
+    return () => clearTimeout(timer);
+  }, [discoverSearch]);
 
   useEffect(() => {
     const saved = localStorage.getItem('notifications_history');
@@ -89,7 +98,9 @@ export default function Dashboard() {
     isLoading: loadingRecs, 
     error: recsError,
     isFetching: fetchingRecs,
+    refetch: refetchRecs,
   } = useRecommendations();
+  const { data: searchResults, isFetching: searchingBooks } = useBookSearch(debouncedSearch);
 
   useEffect(() => {
     const lastCheck = localStorage.getItem('last_wishlist_reminder');
@@ -132,8 +143,13 @@ export default function Dashboard() {
   const totalWishlist = wishlistBooks?.length || 0;
 
   const handleRefreshRecommendations = () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/recommendations'] });
+    // resetQueries clears error state + marks stale, then refetch forces a new request
+    queryClient.resetQueries({ queryKey: ['/api/recommendations'] });
+    refetchRecs();
   };
+
+  // Detect if the error is an auth issue (server restarted, session expired)
+  const isAuthError = recsError instanceof Error && recsError.message.startsWith('401');
 
   // Derive unique genre + language options from loaded recommendations
   const discoverGenreOptions = useMemo(() => {
@@ -146,23 +162,27 @@ export default function Dashboard() {
     return langs.map(l => ({ value: l, label: l }));
   }, [recommendations]);
 
-  // Client-side filter: title, author, description searched; genre + language exact match
+  // Client-side filter first, then fall back to live Open Library search
   const filteredRecommendations = useMemo(() => {
-    let list = recommendations || [];
     const q = discoverSearch.trim().toLowerCase();
+
+    // If searching, first try local filter on pre-loaded recommendations
+    let list = recommendations || [];
     if (q) {
-      list = list.filter(b =>
+      const localMatches = list.filter(b =>
         b.title.toLowerCase().includes(q) ||
         b.author.toLowerCase().includes(q) ||
         b.description.toLowerCase().includes(q) ||
         b.genre.toLowerCase().includes(q) ||
         b.language.toLowerCase().includes(q)
       );
+      // If local filter found results, use them; otherwise use live search results
+      list = localMatches.length > 0 ? localMatches : (searchResults || []);
     }
     if (discoverGenre) list = list.filter(b => b.genre === discoverGenre);
     if (discoverLang)  list = list.filter(b => b.language === discoverLang);
     return list;
-  }, [recommendations, discoverSearch, discoverGenre, discoverLang]);
+  }, [recommendations, discoverSearch, searchResults, discoverGenre, discoverLang]);
 
   const hasDiscoverFilters = !!discoverSearch || !!discoverGenre || !!discoverLang;
   const clearDiscoverFilters = () => {
@@ -259,6 +279,17 @@ export default function Dashboard() {
               >
                 Add Book
               </Button>
+
+              <ActionIcon
+                variant="white"
+                color="violet"
+                size="lg"
+                radius="md"
+                title="Profile & Preferences"
+                onClick={() => navigate('/profile')}
+              >
+                <UserCircle size={20} />
+              </ActionIcon>
 
               <ActionIcon
                 variant="white"
@@ -420,14 +451,44 @@ export default function Dashboard() {
                       </Button>
                     )}
                     <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                      {filteredRecommendations.length} of {(recommendations || []).length} books
+                      {filteredRecommendations.length}{discoverSearch.trim() && searchResults?.length ? '' : ` of ${(recommendations || []).length}`} books
                     </Text>
                   </Group>
                 )}
 
                 {recsError ? (
-                  <Alert color="red" title="Could not load recommendations">
-                    Something went wrong fetching recommendations. Please try again.
+                  <Alert color={isAuthError ? "orange" : "red"} title={isAuthError ? "Session expired" : "Could not load recommendations"}>
+                    <Stack gap="xs">
+                      <Text size="sm">
+                        {isAuthError
+                          ? "Your session has expired. Please refresh the page to log in again."
+                          : "Something went wrong fetching recommendations."}
+                      </Text>
+                      {!isAuthError && (
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="red"
+                          loading={fetchingRecs}
+                          onClick={handleRefreshRecommendations}
+                          leftSection={<RefreshCw size={14} />}
+                          style={{ alignSelf: 'flex-start' }}
+                        >
+                          Retry
+                        </Button>
+                      )}
+                      {isAuthError && (
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="orange"
+                          onClick={() => window.location.reload()}
+                          style={{ alignSelf: 'flex-start' }}
+                        >
+                          Refresh page
+                        </Button>
+                      )}
+                    </Stack>
                   </Alert>
                 ) : loadingRecs ? (
                   <Center py={80}>
@@ -439,10 +500,19 @@ export default function Dashboard() {
                 ) : filteredRecommendations.length === 0 && hasDiscoverFilters ? (
                   <Center py={60}>
                     <Stack align="center" gap="xs">
-                      <Text c="dimmed" size="sm">No books match your search.</Text>
-                      <Button variant="subtle" size="xs" color="violet" onClick={clearDiscoverFilters}>
-                        Clear filters
-                      </Button>
+                      {searchingBooks ? (
+                        <>
+                          <Loader color="violet" size="md" />
+                          <Text c="dimmed" size="sm">Searching Open Library…</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text c="dimmed" size="sm">No books found for "{discoverSearch}"</Text>
+                          <Button variant="subtle" size="xs" color="violet" onClick={clearDiscoverFilters}>
+                            Clear filters
+                          </Button>
+                        </>
+                      )}
                     </Stack>
                   </Center>
                 ) : (

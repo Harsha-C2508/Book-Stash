@@ -51,6 +51,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
       setTranslatedNotes(data.translation);
     } catch (error) {
       console.error('Failed to translate:', error);
+      setTranslatedNotes('⚠️ Translation unavailable. The text may already be in English.');
     } finally {
       setTranslating(false);
     }
@@ -62,7 +63,8 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
     try {
       const res = await apiRequest('POST', '/api/books/summary', { 
         title: book.title, 
-        author: book.author 
+        author: book.author,
+        notes: book.notes || undefined,
       });
       const data = await res.json();
       setAiSummary(data.summary);
@@ -145,7 +147,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
               loaderProps={{ color: 'violet' }}
             />
             <Group justify="space-between">
-              <Title order={4}>AI Summary & Details</Title>
+              <Title order={4}>Book Details</Title>
             </Group>
             
             {aiSummary ? (
@@ -156,7 +158,7 @@ export function BookDetailsDrawer({ book, onClose }: BookDetailsDrawerProps) {
               </ScrollArea>
             ) : !loadingAi && (
               <Text size="sm" c="dimmed">
-                {loadingAi ? 'Generating summary...' : 'Failed to generate summary.'}
+                No details available for this book.
               </Text>
             )}
           </Stack>

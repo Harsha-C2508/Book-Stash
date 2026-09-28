@@ -49,18 +49,18 @@ export function RecommendationCard({ book }: RecommendationCardProps) {
       withBorder
       className="h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
     >
-      <Card.Section style={{ position: 'relative' }}>
+      <Card.Section style={{ position: 'relative', height: 280, overflow: 'hidden' }}>
         {book.coverUrl ? (
           <Image
             src={book.coverUrl}
-            height={220}
+            h={280}
             alt={book.title}
             fit="cover"
-            fallbackSrc={`https://placehold.co/300x220/7c3aed/white?text=${encodeURIComponent(book.title.slice(0, 20))}`}
+            fallbackSrc={`https://placehold.co/300x280/7c3aed/white?text=${encodeURIComponent(book.title.slice(0, 20))}`}
           />
         ) : (
           <Box
-            h={220}
+            h={280}
             style={{ background: 'linear-gradient(135deg, #7c3aed22 0%, #4f46e522 100%)' }}
             className="flex items-center justify-center"
           >
