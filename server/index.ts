@@ -60,7 +60,9 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+// Async setup — registers auth, routes, and error handling
+let setupDone = false;
+const setupPromise = (async () => {
   setupAuth(app);
   await registerRoutes(httpServer, app);
 
@@ -82,19 +84,27 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+  setupDone = true;
 })();
+
+// Start listening when running as a standalone server (Render, local dev)
+// Vercel uses the exported app directly as a serverless function
+const isVercel = process.env.VERCEL === "1" || process.env.VERCEL === "true";
+if (!isVercel) {
+  setupPromise.then(() => {
+    const port = parseInt(process.env.PORT || "5000", 10);
+    httpServer.listen(
+      {
+        port,
+        host: "0.0.0.0",
+        reusePort: true,
+      },
+      () => {
+        log(`serving on port ${port}`);
+      },
+    );
+  });
+}
+
+// Export for Vercel serverless functions
+export default app;
