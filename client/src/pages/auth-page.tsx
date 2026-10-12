@@ -37,7 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type Mode = "welcome" | "onboarding" | "login";
 
